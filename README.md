@@ -14,4 +14,4 @@ This python library, and it's associated command line entry points, produce desi
 - Randomized zone plates
 - Multi-frame time dependent zone plates
 
-...or at least, that is the plan!
+...or at least, that is the plan! 
