@@ -143,7 +143,7 @@ def FFT_DI(U_0, z, wavelength, step, offset=[0,0], verbose=False):
     # The magic of this method that allows for open boundary conditions is the
     # fact that we create G in real space, and then calculate it's FFT, instead
     # of using e.g. the angular spectrum propagator directly in Fourier space.
-    G = create_G(z, wavelength, step, U_0, offset=offset)
+    G = create_G(U_0, z, wavelength, step, offset=offset)
 
     if verbose:
         print('G created, performing FFT')
@@ -298,8 +298,7 @@ def FFT_DI_tiled(U_0, z, wavelength, step,
                        (in_j - out_j) * tile_shape[1] + offset[1]]
 
         # And we perform the actual calculation
-        out_tile = FFT_DI(in_tile, step, wavelength, z,
-                          offset=tile_offset)
+        out_tile = FFT_DI(in_tile, z, wavelength, step, offset=tile_offset)
 
         # Finally, we extract the output tile in a way which gets rid of any
         # section which might extend beyond the output region.

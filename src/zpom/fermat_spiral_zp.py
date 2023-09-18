@@ -31,6 +31,11 @@ def define_zp_locations(n_frames, ozw, wavelength,
         The azimuthal angle of the first mini-zp, in radians. Default is 0.
     verbose : bool, optional
         Whether to print the zone plate parameters. Default is false.
+
+    Returns
+    -------
+    design: tuple
+        A tuple of dictionaries describing the parameters of each individual zone plate
     """
     
     if mini_zp_width is None:
