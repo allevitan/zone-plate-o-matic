@@ -6,7 +6,7 @@ golden_angle = (np.pi * (3 - np.sqrt(5)))
 def define_zp_locations(n_frames, ozw, wavelength,
                         inner_zone_index, mini_zp_spacing, mini_zp_width=None,
                         mini_zp_length_factor=1, mini_zps_per_frame=3,
-                        phi_0=0, verbose=True):
+                        equal_width=True, phi_0=0):
     """Defines the properties of the mini zone plates in a multi-frame RZP
 
     Parameters
@@ -22,11 +22,16 @@ def define_zp_locations(n_frames, ozw, wavelength,
     mini_zp_spacing : int
         The number of zones separating each frame from the subsequent frame
     mini_zp_width : int, optional
-        The radial width (in number of zones) of each mini-zone plate. Default is equal to mini_zp_spacing
+        The radial width (in number of zones) of each mini-zone plate. Default
+        is equal to mini_zp_spacing
     mini_zp_length_factor : float, optional
-        The ratio of the azimuthal length of the mini-zone plates to half the average nearest-neighbor distance. Default is 1
+        The ratio of the azimuthal length of the mini-zone plates to half the
+        average nearest-neighbor distance. Default is 1
     mini_zps_per_frame : int, optional
         The number of mini-zps to place at each radius. Default is 3
+    equal_width : bool, optional
+        Default is True. Whether to restrict the width of the inner mini-ZPs
+        to match the width of the outer one
     phi_0 : float, optional
         The azimuthal angle of the first mini-zp, in radians. Default is 0.
     verbose : bool, optional
@@ -35,7 +40,8 @@ def define_zp_locations(n_frames, ozw, wavelength,
     Returns
     -------
     design: tuple
-        A tuple of dictionaries describing the parameters of each individual zone plate
+        A tuple of dictionaries describing the parameters of each individual
+        mini zone plate
     """
     
     if mini_zp_width is None:
@@ -59,6 +65,15 @@ def define_zp_locations(n_frames, ozw, wavelength,
     inner_rs = np.sqrt(starting_zones * f * wavelength + starting_zones**2 * wavelength**2 / 4)
     outer_rs = np.sqrt(ending_zones * f * wavelength + ending_zones**2 * wavelength**2 / 4)
 
+    if equal_width:
+        width = outer_rs[-1] - inner_rs[-1]
+        outer_rs = inner_rs + width
+
+    # This is (roughly) the area of the optic occupied by region associated with each frame
+    frame_area = np.pi * (mini_zp_spacing * f * wavelength)
+    # And this is a rough measure of a good mini-zp radius
+    base_radius = np.sqrt(frame_area / mini_zps_per_frame) / 2
+
     xs = (inner_rs + outer_rs)/2 * np.cos(phis)
     ys = (inner_rs + outer_rs)/2 * np.sin(phis)
 
@@ -74,6 +89,7 @@ def define_zp_locations(n_frames, ozw, wavelength,
           'wavelength': wavelength,
           'inner_r': inner_r,
           'outer_r': outer_r,
+          'radius': base_radius * mini_zp_length_factor,
         } for (phi, x, y, sz, ez, frame_id, inner_r, outer_r)
         in zip(
             phis,
@@ -92,25 +108,23 @@ def define_zp_locations(n_frames, ozw, wavelength,
 
 def inspect_zp_design(design, pix_size=1e-6):
     plt.figure()
-    for mini_zp in design:
-        plt.plot(mini_zp['x'], mini_zp['y'], 'k.')
-
-    plt.figure()
     max_r = max([mini_zp['outer_r'] for mini_zp in design])
     xs = np.arange(-max_r, max_r, pix_size)
-    Xs, Ys = np.meshgrid(xs, xs, indexing='ij')
+    Xs, Ys = np.meshgrid(xs, xs, indexing='xy')
     Rs = np.sqrt(Xs**2+Ys**2)
     Angles = np.arctan2(Xs,Ys)
     zp_mask = np.zeros_like(Xs)
     for mini_zp in design:
         mask = np.sqrt(((Xs - mini_zp['x'])**2 
-                        + (Ys - mini_zp['y'])**2)) < 1e-4
+                        + (Ys - mini_zp['y'])**2)) < mini_zp['radius']
         mask[Rs < mini_zp['inner_r']] = 0
         mask[Rs > mini_zp['outer_r']] = 0
         zp_mask += mask
     plt.imshow(zp_mask)
+    plt.colorbar()
 
-
-design = define_zp_locations(10, 40e-9, 1e-9, 2500, 1000)
+design = define_zp_locations(6, 40e-9, 2.066e-10, 2000, 1000, mini_zp_width=1000)
+inspect_zp_design(design)
+design = define_zp_locations(12, 40e-9, 2.066e-10, 2000, 500, mini_zp_width=500)
 inspect_zp_design(design)
 plt.show()

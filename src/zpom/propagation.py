@@ -327,11 +327,15 @@ def inverse_far_field(wavefront):
     return t.fft.fftshift(propagated, dim=(-1,-2))
 
 
-def pad_to_shape(arr, shape):
-    """Pads an array symmetrically up to a given shape
+def fourier_pad_to_shape(arr, shape):
+    """Pads an array in Fourier space up to a given shape
 
-    This function will also symmetrically crop an array if given a shape
-    smaller than the shape of the input array.
+    Fundamentally, this operation upsamples or downsamples an image to a given
+    shape, preserving it's real-space width but changing the pixel size.
+
+    - This function assumes periodic boundary conditions
+    - The function preserves the zero-frequency pixel location during the crop
+    - It will happily crop (downsample) if given a shape smaller than the input
     
     Parameters
     ----------
