@@ -12,16 +12,24 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://gitlab.psi.ch/cxi/zone-plate-o-matic",
+    install_requires = [
+        'numpy',
+        'torch',
+        'skimage',
+        'h5py',
+        'gdspy'
+        'tqdm'
+    ],
     packages=setuptools.find_packages(
         where='src',
         include=['zpom'],
     ),
     package_dir={"": "src"},
-#    entry_points = {
-#        'console_scripts' : [
-#            'make-base-rzp-design = zpom.make_base_rzp_design:main',
-#            'realize-rzp-design = zpom.realize_rzp_design:main']
-#        },
+   entry_points = {
+        'console_scripts' : [
+            'design-rzp = zpom.design_rzp:main',
+            'realize-design = zpom.realize_design:main']
+        },
     classifiers=[
         "Programming Language :: Python :: 3",
         "Operating System :: OS Independent",

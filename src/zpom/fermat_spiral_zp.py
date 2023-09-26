@@ -109,7 +109,7 @@ def define_zp_locations(n_frames, ozw, wavelength,
 def inspect_zp_design(design, pix_size=1e-6):
     plt.figure()
     max_r = max([mini_zp['outer_r'] for mini_zp in design])
-    xs = np.arange(-max_r, max_r, pix_size)
+    xs = np.arange(-max_r*1.1, max_r*1.1, pix_size)
     Xs, Ys = np.meshgrid(xs, xs, indexing='xy')
     Rs = np.sqrt(Xs**2+Ys**2)
     Angles = np.arctan2(Xs,Ys)
