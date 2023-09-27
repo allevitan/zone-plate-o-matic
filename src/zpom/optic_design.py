@@ -31,14 +31,6 @@ from skimage.measure import find_contours
 import gdspy
 import tqdm
 
-# TODO: I should update grating hologram to take both an optic window
-# (e.g. what region of the optic plane should I simulate) and a 
-# window function (e.g. please multiply the optic efficiency by this amount
-# in this region) that can be used both for apodization and for defining
-# the shape of the object. If this is passed in as a function which can accept
-# an x,y array, then it could be general enough to work for strange off-axis
-# zps and for regular old ZPs. 
-
 # TODO: In the future I could also add an "abberation" function or something
 # like that so that this code could be used to design regular zone plates
 # with a fixed aberration function in Fourier space, like what they use at
@@ -55,21 +47,20 @@ def design_rzp(dr, NZ, NS, wavelength, step, output_filename,
                apodization_ratio=0,
                verbose=False,):
     
-    # Illumination spot radius
-    sample_r = NS * dr / 2 
     
-    if verbose:
-        print('Focal Spot Diameter',2*sample_r*1e6,'um', flush=True)
-
     # The real-valued dtype corresponding to the given complex-valued dtype.
     real_dtype = t.real(t.ones(1,dtype=dtype)).dtype
 
     # We create the speckle texture for the target focal spot, at a resolution
     # which matches the final ozw
+    sample_r = NS * dr / 2 
     base_input_shape = [int((2 * sample_r) // dr) + 1]*2
     U_0 = t.exp(2j*np.pi*t.rand(*base_input_shape,
                                 dtype=real_dtype))
-    
+
+    if verbose:
+        print('Focal Spot Diameter',2*sample_r*1e6,'um', flush=True)
+
     # And we upsample it to the full resolution of our final design file
     input_shape = [int((2 * sample_r) // step) + 1]*2
     U_0 = propagation.fourier_pad_to_shape(U_0, input_shape)
@@ -81,17 +72,13 @@ def design_rzp(dr, NZ, NS, wavelength, step, output_filename,
     ys = (ys - t.mean(ys)).to(dtype=t.float32)
     Xs, Ys = t.meshgrid(xs, ys, indexing='ij')
     Rs2 = (xs**2)[:,None] + (ys**2)[None,:]
-    del Xs, Ys
-
     U_0[Rs2>sample_r**2] = 0
+    del Xs, Ys, Rs2
 
     apodization_width = apodization_ratio * 8 * NZ * dr / NS
     
-    # OMG dr and NZ are not even needed for design grating hologram....
-    # instead, I need window, window_function, and f.
-    # The focal distance for the optic
+    # Calculate the focal distance & radius of the optic
     f = 4 * NZ * dr**2 / wavelength
-    # The radius of the optic
     optic_r = 2 * NZ * dr
     window = ((-optic_r,optic_r), (-optic_r, optic_r))
 
@@ -131,24 +118,13 @@ def design_rzp(dr, NZ, NS, wavelength, step, output_filename,
     # As a final convenience, we add a few extra bits of metadata to the design
     # file that the general grating hologram function didn't know about
     with h5py.File(output_filename, 'r+') as f:
-        hc = 1.23984e-6 # in m*eV
         apodization_ratio = apodization_ratio
-        fd = 4 * NZ * dr**2 / wavelength # focal length
-        A1 = fd * wavelength / hc
         f.create_dataset('dr', data=[dr])
         f['dr'].attrs['units'] = 'm'
         f.create_dataset('NZ', data=[NZ])
-        f.create_dataset('step', data=[step]) # TODO the grating hologram function should know about this
-        f['step'].attrs['units'] = 'm'
-        f.create_dataset('wavelength', data=[wavelength])
-        f['wavelength'].attrs['units'] = 'm'
         f.create_dataset('NS', data=[NS])
         f.create_dataset('focus_diameter', data=[2*sample_r])
         f['focus_diameter'].attrs['units'] = 'm'
-        f.create_dataset('focal_distance', data=[fd])
-        f['focal_distance'].attrs['units'] = 'm'
-        f.create_dataset('A1', data=[A1])
-        f['A1'].attrs['units'] = 'm/eV'
         f.create_dataset('buttress_spacing', data=[buttress_spacing])
         f.create_dataset('buttress_deviation', data=[buttress_deviation])
         f.create_dataset('apodization_ratio', data=[apodization_ratio])
@@ -199,13 +175,27 @@ def design_grating_hologram(U_0,
     max_abs = 0
 
     with h5py.File(output_filename, 'w') as output_store:
+
+        # First, we populate some metadata with info about the optic
+        output_store.create_dataset('focal_distance', data=[f])
+        output_store['focal_distance'].attrs['units'] = 'm'
+        hc = 1.23984e-6 # in m*eV
+        A1 = f * wavelength / hc # focal distance per photon energy
+        output_store.create_dataset('A1', data=[A1])
+        output_store['A1'].attrs['units'] = 'm/eV'
+        output_store.create_dataset('wavelength', data=[wavelength])
+        output_store['wavelength'].attrs['units'] = 'm'
+        output_store.create_dataset('step', data=[step[0]])
+        output_store['step'].attrs['units'] = 'm'
+
         # This output will include the zones and information for designing
         # the variable width buttresses
         grating_output = output_store.create_dataset('grating', dtype=np.int8,
                                                      shape=tuple(output_shape),
                                                      chunks=tuple(tile_shape),
                                                      compression=compression)
-        # This output will include 
+        
+        # This output will include the wavefield amplitudes
         amplitude_output = output_store.create_dataset(
             'amplitude', dtype=np.int16,
             shape=tuple(output_shape),
