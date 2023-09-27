@@ -30,13 +30,20 @@ from multiprocessing import Pool
 from skimage.measure import find_contours
 import gdspy
 import tqdm
+import os
+from matplotlib import pyplot as plt
 
 # TODO: In the future I could also add an "abberation" function or something
 # like that so that this code could be used to design regular zone plates
 # with a fixed aberration function in Fourier space, like what they use at
 # SLS.
 
-def design_rzp(dr, NZ, NS, wavelength, step, output_filename,
+def design_rzp(dr,
+               NZ,
+               NS,
+               wavelength,
+               step,
+               output_filename,
                bs_ratio=0.5,
                dtype=t.complex128,
                tile_size=None,
@@ -47,6 +54,9 @@ def design_rzp(dr, NZ, NS, wavelength, step, output_filename,
                apodization_ratio=0,
                verbose=False,):
     
+    if buttress_spacing is None:
+        buttress_spacing = 4 * dr
+
     
     # The real-valued dtype corresponding to the given complex-valued dtype.
     real_dtype = t.real(t.ones(1,dtype=dtype)).dtype
@@ -112,7 +122,6 @@ def design_rzp(dr, NZ, NS, wavelength, step, output_filename,
                             buttress_deviation=buttress_deviation,
                             outer_r=optic_r,
                             tiling_style=tiling_style,
-                            apodize=apodization_width,
                             verbose=verbose)
 
     # As a final convenience, we add a few extra bits of metadata to the design
@@ -129,9 +138,250 @@ def design_rzp(dr, NZ, NS, wavelength, step, output_filename,
         f.create_dataset('buttress_deviation', data=[buttress_deviation])
         f.create_dataset('apodization_ratio', data=[apodization_ratio])
         f.create_dataset('beamstop_ratio', data=[bs_ratio])
+
+
+# An important constant for the sunflower array    
+golden_angle = (np.pi * (3 - np.sqrt(5)))
+
+def place_sunflower_zps(dr, n_frames, wavelength,
+                        inner_zone_index, mini_zp_spacing, mini_zp_width=None,
+                        mini_zp_length_factor=1, mini_zps_per_frame=3,
+                        equal_width=True, phi_0=0):
+    """Defines the properties of the mini zone plates in a multi-frame RZP
+
+    Parameters
+    ----------
+    dr : : float
+        The outer zone width of the entire multi-frame zone plate, in meters
+    n_frames : int
+        The number of frames (distinct mini-zone plate radii) to design for
+    wavelength : float
+        The design wavelength, in meters
+    inner_zone_index : int
+        The index of the innermost zone of the first frame.
+    mini_zp_spacing : int
+        The number of zones separating each frame from the subsequent frame
+    mini_zp_width : int, optional
+        The radial width (in number of zones) of each mini-zone plate. Default
+        is equal to mini_zp_spacing
+    mini_zp_length_factor : float, optional
+        The ratio of the azimuthal length of the mini-zone plates to half the
+        average nearest-neighbor distance. Default is 1
+    mini_zps_per_frame : int, optional
+        The number of mini-zps to place at each radius. Default is 3
+    equal_width : bool, optional
+        Default is True. Whether to restrict the width of the inner mini-ZPs
+        to match the width of the outer one
+    phi_0 : float, optional
+        The azimuthal angle of the first mini-zp, in radians. Default is 0.
+    verbose : bool, optional
+        Whether to print the zone plate parameters. Default is false.
+
+    Returns
+    -------
+    design: tuple
+        A tuple of dictionaries describing the parameters of each individual
+        mini zone plate
+    """
+    
+    if mini_zp_width is None:
+        mini_zp_width = mini_zp_spacing
+
+    ns = np.arange(n_frames * mini_zps_per_frame)
+    phis = phi_0 + ns * golden_angle
+
+    NZ = inner_zone_index + n_frames * mini_zp_spacing
+
+    # Calculation of the focal distance, including the n**2 * lambda**2 term in the zone plate equation
+    a = wavelength**2
+    b = 2 * NZ * wavelength**3 - 4 * dr**2 * NZ * wavelength
+    c = NZ**2 * wavelength**2 * ( wavelength**2 - 4 * dr**2 / 2 )
+    f = (-b + np.sqrt(b**2 - 4 * a * c)) / (2 * a)
+    # f =  dr**2 * 4 * NZ / wavelength ## This is the simplified calculation that's usually used
+
+    frame_idx = np.repeat(np.arange(0,n_frames), mini_zps_per_frame)
+    starting_zones = inner_zone_index + frame_idx * mini_zp_spacing
+    ending_zones = starting_zones + mini_zp_width
+    inner_rs = np.sqrt(starting_zones * f * wavelength + starting_zones**2 * wavelength**2 / 4)
+    outer_rs = np.sqrt(ending_zones * f * wavelength + ending_zones**2 * wavelength**2 / 4)
+
+    if equal_width:
+        width = outer_rs[-1] - inner_rs[-1]
+        outer_rs = inner_rs + width
+
+    # This is (roughly) the area of the optic occupied by region associated with each frame
+    frame_area = np.pi * (mini_zp_spacing * f * wavelength)
+    # And this is a rough measure of a good mini-zp radius
+    base_radius = np.sqrt(frame_area / mini_zps_per_frame) / 2
+
+    xs = (inner_rs + outer_rs)/2 * np.cos(phis)
+    ys = (inner_rs + outer_rs)/2 * np.sin(phis)
+
+    design = [
+        { 'phi': phi,
+          'x': x,
+          'y': y,
+          'start_zone': sz,
+          'end_zone': ez,
+          'f': f,
+          'frame_id': frame_id,
+          'dr': dr,
+          'wavelength': wavelength,
+          'inner_r': inner_r,
+          'outer_r': outer_r,
+          'radius': base_radius * mini_zp_length_factor,
+        } for (phi, x, y, sz, ez, frame_id, inner_r, outer_r)
+        in zip(
+            phis,
+            xs,
+            ys,
+            starting_zones,
+            ending_zones,
+            frame_idx,
+            inner_rs,
+            outer_rs
+        )
+    ]
+
+    return design
+
+
+def inspect_sunflower_placement(design, pix_size=1e-6):
+    plt.figure()
+    max_r = max([mini_zp['outer_r'] for mini_zp in design])
+    xs = np.arange(-max_r*1.1, max_r*1.1, pix_size)
+    Xs, Ys = np.meshgrid(xs, xs, indexing='xy')
+    Rs = np.sqrt(Xs**2+Ys**2)
+    Angles = np.arctan2(Xs,Ys)
+    zp_mask = np.zeros_like(Xs)
+    for mini_zp in design:
+        mask = np.sqrt(((Xs - mini_zp['x'])**2 
+                        + (Ys - mini_zp['y'])**2)) < mini_zp['radius']
+        mask[Rs < mini_zp['inner_r']] = 0
+        mask[Rs > mini_zp['outer_r']] = 0
+        zp_mask += mask
+    plt.imshow(zp_mask)
+    plt.colorbar()
+
+
+def design_sunflower_array(dr,
+                           n_frames,
+                           wavelength,
+                           focus_diameter,
+                           inner_zone_index,
+                           mini_zp_spacing,
+                           step,
+                           output_filename,
+                           dtype=t.complex128,
+                           tile_size=None,
+                           device='cpu',
+                           mini_zp_width=None,
+                           mini_zp_length_factor=1,
+                           mini_zps_per_frame=3,
+                           equal_width=True,
+                           phi_0=0,
+                           buttress_spacing=None,
+                           buttress_deviation=0.15,
+                           tiling_style='alternating',
+                           apodization_ratio=0,
+                           verbose=False,):
+
+    if mini_zp_width is None:
+        mini_zp_width = mini_zp_spacing
+
+    if buttress_spacing is None:
+        buttress_spacing = 4 * dr
+
+    zp_locations = place_sunflower_zps(
+        dr, n_frames, wavelength,
+        inner_zone_index, mini_zp_spacing,
+        mini_zp_width=mini_zp_width,
+        mini_zp_length_factor=mini_zp_length_factor,
+        mini_zps_per_frame=mini_zps_per_frame,
+        equal_width=equal_width,
+        phi_0=phi_0)
+    
+    os.mkdir(output_filename)
+
+    # We make one design focal spot which corresponds to the focal spot of the
+    # full zp array, if it wasn't broken into separate bits. We'll then use
+    # this same focal spot for each mini-ZP, but all the mini-ZPs will get
+    # different sections of the ZP in Fourier space.
+
+    # The real-valued dtype corresponding to the given complex-valued dtype.
+    real_dtype = t.real(t.ones(1,dtype=dtype)).dtype
+
+    # We create the speckle texture for the target focal spot, at a resolution
+    # which matches the final ozw
+    base_input_shape = [int(focus_diameter // dr) + 1]*2
+    U_0 = t.exp(2j*np.pi*t.rand(*base_input_shape,
+                                dtype=real_dtype))
+
+    if verbose:
+        print('Focal Spot Diameter',focus_diameter*1e6,'um', flush=True)
+
+    # And we upsample it to the full resolution of our final design file
+    input_shape = [int(focus_diameter // step) + 1]*2
+    U_0 = propagation.fourier_pad_to_shape(U_0, input_shape)
+
+    # Finally, we crop the design focal spot to the desired size
+    xs = t.arange(0, U_0.shape[0], dtype=t.float32) * step
+    ys = t.arange(0, U_0.shape[1], dtype=t.float32) * step
+    xs = (xs - t.mean(xs)).to(dtype=t.float32)
+    ys = (ys - t.mean(ys)).to(dtype=t.float32)
+    Xs, Ys = t.meshgrid(xs, ys, indexing='ij')
+    Rs2 = (xs**2)[:,None] + (ys**2)[None,:]
+    U_0[Rs2>(focus_diameter/2)**2] = 0
+    del Xs, Ys, Rs2
+
+    # Calculation of the focal distance, including the n**2 * lambda**2 term in the zone plate equation
+    NZ = inner_zone_index + (n_frames-1) * mini_zp_spacing + mini_zp_width
+    print('NZ', NZ)
+    a = wavelength**2
+    b = 2 * NZ * wavelength**3 - 4 * dr**2 * NZ * wavelength
+    c = NZ**2 * wavelength**2 * ( wavelength**2 - 4 * dr**2 / 2 )
+    f = (-b + np.sqrt(b**2 - 4 * a * c)) / (2 * a)
+    # f =  dr**2 * 4 * NZ / wavelength ## This is the simplified calculation that's usually used
+
+    for id, mini_zp in enumerate(zp_locations):
+        if verbose:
+            print('Working on Mini ZP %d of %d (ZP%03d).' % (id+1, len(zp_locations, id)))
+            
+        mini_zp_filename = output_filename + ('/ZP%03d.h5' % id)
+        # First we have to set up the window and window function
+        x = mini_zp['x']
+        y = mini_zp['y']
+        r = mini_zp['radius']
+        window = ((x - r, x + r), (y - r, y + r))
+
+        def window_function(X, Y, Angle, R):
+            radial_band = t.logical_and(R > mini_zp['inner_r'], R < mini_zp['outer_r'])
+            mini_R = t.sqrt((X-x)**2 + (Y-y)**2)
+            disk = mini_R < r
+            return t.logical_and(radial_band, disk)
         
+        
+        design_grating_hologram(U_0,
+                                f,
+                                window,
+                                window_function,
+                                wavelength,
+                                step,
+                                mini_zp_filename,
+                                dtype=dtype,
+                                device=device,
+                                tile_size=tile_size,
+                                buttress_spacing=buttress_spacing,
+                                buttress_deviation=buttress_deviation,
+                                outer_r=mini_zp['outer_r'],
+                                tiling_style=tiling_style,
+                                verbose=verbose)
+    
 
 
+    plt.show()
+    
+            
 def design_grating_hologram(U_0,
                             f,
                             window,
@@ -146,7 +396,6 @@ def design_grating_hologram(U_0,
                             buttress_deviation=0.15, # max deviation allowed from the defined buttress spacing
                             outer_r=None, # Definition of the outer position where the buttress spacing is correct, default is the edge of the window.
                             tiling_style='alternating',
-                            apodize=0,
                             compression='lzf',
                             verbose=False):
 
@@ -211,21 +460,12 @@ def design_grating_hologram(U_0,
         n = len(output_is)*len(output_js)*len(input_is)*len(input_js)
         
         for idx, (in_i, in_j, out_i, out_j) in enumerate(combos):
+
             if verbose:
                 print('Working on tile',idx+1,'of',n, flush=True)
-            in_tile = t.zeros(tile_shape, dtype=dtype, device=U_0.device)
-            in_selection = U_0[in_i*tile_shape[0]:(in_i+1) * tile_shape[0],
-                               in_j*tile_shape[1]:(in_j+1) * tile_shape[1]]
-            # What this does is ensure a standard size, even when the 
-            # selection overlaps the edge.
-            in_tile[:in_selection.shape[0],
-                    :in_selection.shape[1]] = in_selection
-            tile_offset = [(in_i - out_i) * tile_shape[0] + base_offset[0],
-                           (in_j - out_j) * tile_shape[1] + base_offset[1]]
-            out_tile = propagation.FFT_DI(in_tile.to(device=device),
-                                          -f, wavelength, step,
-                                          offset=tile_offset).cpu()
-           
+
+            # We calculate the window function first, because if it's all zeroes we don't
+            # even need to do the full calculation
             xs = full_xs[0] + t.arange(out_i*tile_shape[0],
                                        (out_i + 1) * tile_shape[0]) * step[0]
             ys = full_ys[0] + t.arange(out_j * tile_shape[1],
@@ -235,7 +475,26 @@ def design_grating_hologram(U_0,
             Rs2 = Xs**2 + Ys**2
             Rs = t.sqrt(Rs2)            
             window_fn_output = window_function(Xs,Ys,Angles,Rs)
-            out_tile[window_fn_output == 0] = 0
+
+            in_tile = t.zeros(tile_shape, dtype=dtype, device=U_0.device)
+            in_selection = U_0[in_i*tile_shape[0]:(in_i+1) * tile_shape[0],
+                               in_j*tile_shape[1]:(in_j+1) * tile_shape[1]]
+            # What this does is ensure a standard size, even when the 
+            # selection overlaps the edge.
+            in_tile[:in_selection.shape[0],
+                    :in_selection.shape[1]] = in_selection
+            tile_offset = [(in_i - out_i) * tile_shape[0] + base_offset[0],
+                           (in_j - out_j) * tile_shape[1] + base_offset[1]]
+            if t.all(t.eq(window_fn_output,0)):
+                # No point in doing the expensive calculation if it's all just
+                # going to be masked off
+                out_tile = in_tile * 0
+            else:
+                out_tile = propagation.FFT_DI(in_tile.to(device=device),
+                                              -f, wavelength, step,
+                                              offset=tile_offset).cpu()
+           
+                out_tile[window_fn_output == 0] = 0
             
                 
             # Now we set up the grating
