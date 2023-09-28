@@ -51,7 +51,7 @@ def main():
     print((f * wavelength / hc))
 
     if args.output is None:
-        output_filename = 'Sunflower_RZP_dr=%0.2fnm_NF=%d_focdiam=%0.2fnm.h5' % (dr*1e9, args.n_frames, focus_diameter*1e9)
+        output_filename = 'Sunflower_RZP_dr=%0.2fnm_NF=%d_focdiam=%0.2fum' % (dr*1e9, args.n_frames, focus_diameter*1e6)
     else:
         output_filename = args.output
 

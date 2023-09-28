@@ -582,13 +582,11 @@ def realize_design(filename, lr_filename, gds_filename,
                    verbose=False, overlap=512, view=False):
     """Makes contours and the low resolution version"""
     with h5py.File(filename,'r') as f:
-        print(list(f))
         step = float(f['step'][()])
         buttress_spacing = float(f['buttress_spacing'][()])
         buttress_fraction = buttress_width / (buttress_spacing)
         shape = f['amplitude'].shape
         offset = np.array(f['offset'])
-        print(offset)
 
         chunk_size = (chunk_size // reduction_factor) * reduction_factor
         
@@ -600,6 +598,7 @@ def realize_design(filename, lr_filename, gds_filename,
                                 dtype=np.float32,
                                 shape=(s//reduction_factor for s in shape),
                                 compression='lzf')
+            lr_f.create_dataset('step', data=[step*reduction_factor])
             i_list = t.arange(propagation.get_num_tiles(shape[0], chunk_size))
             j_list = t.arange(propagation.get_num_tiles(shape[1], chunk_size))
             for i, j in it.product(i_list, j_list):
