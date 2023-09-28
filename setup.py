@@ -15,9 +15,9 @@ setuptools.setup(
     install_requires = [
         'numpy',
         'torch',
-        'skimage',
+        'scikit-image',
         'h5py',
-        'gdspy'
+        'gdstk',
         'tqdm'
     ],
     packages=setuptools.find_packages(
@@ -28,7 +28,9 @@ setuptools.setup(
    entry_points = {
         'console_scripts' : [
             'design-rzp = zpom.design_rzp:main',
-            'realize-design = zpom.realize_design:main']
+            'design-sunflower-rzp = zpom.design_sunflower_rzp:main',
+            'realize-design = zpom.realize_design:main',
+            'realize-sunflower-design = zpom.realize_sunflower_design:main']
         },
     classifiers=[
         "Programming Language :: Python :: 3",

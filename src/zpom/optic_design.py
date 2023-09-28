@@ -28,7 +28,7 @@ import h5py
 from zpom import propagation
 from multiprocessing import Pool
 from skimage.measure import find_contours
-import gdspy
+import gdstk
 import tqdm
 import os
 from matplotlib import pyplot as plt
@@ -190,7 +190,7 @@ def place_sunflower_zps(dr, n_frames, wavelength,
     ns = np.arange(n_frames * mini_zps_per_frame)
     phis = phi_0 + ns * golden_angle
 
-    NZ = inner_zone_index + n_frames * mini_zp_spacing
+    NZ = inner_zone_index + (n_frames-1) * mini_zp_spacing + mini_zp_width
 
     # Calculation of the focal distance, including the n**2 * lambda**2 term in the zone plate equation
     a = wavelength**2
@@ -345,8 +345,8 @@ def design_sunflower_array(dr,
 
     for id, mini_zp in enumerate(zp_locations):
         if verbose:
-            print('Working on Mini ZP %d of %d (ZP%03d).' % (id+1, len(zp_locations, id)))
-            
+            print('Working on Mini ZP %d of %d (ZP%03d).' % (id+1, len(zp_locations), id))
+
         mini_zp_filename = output_filename + ('/ZP%03d.h5' % id)
         # First we have to set up the window and window function
         x = mini_zp['x']
@@ -376,10 +376,18 @@ def design_sunflower_array(dr,
                                 outer_r=mini_zp['outer_r'],
                                 tiling_style=tiling_style,
                                 verbose=verbose)
+        
+        with h5py.File(mini_zp_filename, 'r+') as output:
+            apodization_ratio = apodization_ratio
+            output.create_dataset('dr', data=[dr])
+            output['dr'].attrs['units'] = 'm'
+            output.create_dataset('focus_diameter', data=[focus_diameter])
+            output['focus_diameter'].attrs['units'] = 'm'
+            output.create_dataset('buttress_spacing', data=[buttress_spacing])
+            output.create_dataset('buttress_deviation', data=[buttress_deviation])
+            output.create_dataset('apodization_ratio', data=[apodization_ratio])
+
     
-
-
-    plt.show()
     
             
 def design_grating_hologram(U_0,
@@ -424,10 +432,12 @@ def design_grating_hologram(U_0,
     max_abs = 0
 
     with h5py.File(output_filename, 'w') as output_store:
-
         # First, we populate some metadata with info about the optic
         output_store.create_dataset('focal_distance', data=[f])
         output_store['focal_distance'].attrs['units'] = 'm'
+        # This is with respect to the center of the input array, to be used
+        # to arrange the tiles in the final design
+        output_store.create_dataset('offset', data=[full_xs[0], full_ys[0]])
         hc = 1.23984e-6 # in m*eV
         A1 = f * wavelength / hc # focal distance per photon energy
         output_store.create_dataset('A1', data=[A1])
@@ -437,18 +447,20 @@ def design_grating_hologram(U_0,
         output_store.create_dataset('step', data=[step[0]])
         output_store['step'].attrs['units'] = 'm'
 
+
+        chunk_shape = np.minimum(tile_shape, output_shape)
         # This output will include the zones and information for designing
         # the variable width buttresses
         grating_output = output_store.create_dataset('grating', dtype=np.int8,
                                                      shape=tuple(output_shape),
-                                                     chunks=tuple(tile_shape),
+                                                     chunks=tuple(chunk_shape),
                                                      compression=compression)
         
         # This output will include the wavefield amplitudes
         amplitude_output = output_store.create_dataset(
             'amplitude', dtype=np.int16,
             shape=tuple(output_shape),
-            chunks=tuple(tile_shape),
+            chunks=tuple(chunk_shape),
             compression=compression)
         
         
@@ -570,11 +582,13 @@ def realize_design(filename, lr_filename, gds_filename,
                    verbose=False, overlap=512, view=False):
     """Makes contours and the low resolution version"""
     with h5py.File(filename,'r') as f:
-        dr = float(f['dr'][()])
+        print(list(f))
         step = float(f['step'][()])
         buttress_spacing = float(f['buttress_spacing'][()])
         buttress_fraction = buttress_width / (buttress_spacing)
         shape = f['amplitude'].shape
+        offset = np.array(f['offset'])
+        print(offset)
 
         chunk_size = (chunk_size // reduction_factor) * reduction_factor
         
@@ -654,14 +668,16 @@ def realize_design(filename, lr_filename, gds_filename,
         print('Now cleaning the contours')
         final_contours = clean_contours_multiprocess(
             contours, n_processes=n_processes, show_progress=verbose)
-
+        
         conversion_factor = step * 1e6 # um since this is the default gdsii unit
-        converted_contours = [conversion_factor * c for c in final_contours]
+        converted_contours = [conversion_factor * c + offset * 1e6
+                              for c in final_contours]
+
         # The GDSII file is called a library, which contains multiple cells.
         # We tie the precision to the step size, because if the step size is
         # too small, the field size can be limited because positions are stored
         # as int32s I believe
-        lib = gdspy.GdsLibrary(unit=1e-6,precision=step/10)#1e-12)
+        lib = gdstk.Library(unit=1e-6,precision=step/10)#1e-12)
         
         # Geometry must be placed in cells.
         cell = lib.new_cell('RZP')
@@ -669,7 +685,7 @@ def realize_design(filename, lr_filename, gds_filename,
         # Create the geometry (a single rectangle) and add it to the cell.
         
         for contour in converted_contours:
-            cell.add(gdspy.Polygon(contour))
+            cell.add(gdstk.Polygon(contour))
             
         # Save the library in a file called 'first.gds'.
         lib.write_gds(gds_filename)
@@ -679,7 +695,7 @@ def realize_design(filename, lr_filename, gds_filename,
 
         if view:
             # Display all cells using the internal viewer.
-            gdspy.LayoutViewer(lib)
+            gdstk.LayoutViewer(lib)
 
 def process_contours(chunk, pad_i, pad_j, start_i, start_j, chunk_size):
     # Close contours at the edge, so this can work with non-buttressed ZPs
