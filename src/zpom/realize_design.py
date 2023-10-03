@@ -9,13 +9,12 @@ def main():
 
     parser = argparse.ArgumentParser(
         prog='realize_rzp_design',
-        description='Converts a base RZP design file into a vectorized gdsii file and a low-resolution mask file for later simulation')
+        description='Converts a base RZP design file into a vectorized gdsii file.')
 
 
     parser.add_argument('base_file', type=str, help='The base rzp design file')
     parser.add_argument('grating_level', type=float, help='The fraction of the max amplitude to saturate at. Setting this to 1 provides best quality, at the expense of efficiency. 0.6 is usually a reasonable middle ground, and 0 produces a zone plate without any amplitude variation.')
     parser.add_argument('buttress_width', type=float, help='The width of the buttresses, in nm. 0 will produce no buttresses')
-    parser.add_argument('reduction_factor', type=int, help='The number of pixels to bin into a single pixel for the low resolution mask output')
     parser.add_argument('--n_processes', '-n', type=int, default=1, help='The number of simultaneous processes to run, default=1')
     parser.add_argument('--chunk_size', type=int, default=4096, help='The chunk size for loading and processing the files, default is 4096')
     parser.add_argument('--output', '-o', type=str, help='The output filename base (without the .gds or .h5 extension) to be used for the output gdsii and low-resolution mask file. There is a sensible default')
@@ -27,8 +26,6 @@ def main():
                                               args.buttress_width))
     else:
         output=args.output
-
-    lr_file = output + '.h5'
     gds_file = output + '.gds'
 
 
@@ -52,12 +49,11 @@ def main():
     print('Starting Calculation')
 
 
-    realize_design(args.base_file, lr_file, gds_file,
+    realize_design(args.base_file, gds_file,
                    buttress_width=buttress_width,
                    grating_max=args.grating_level,
                    n_processes=args.n_processes,
                    chunk_size=args.chunk_size,
-                   reduction_factor=args.reduction_factor,
                    verbose=True, view=False)
 
 
