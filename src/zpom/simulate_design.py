@@ -15,14 +15,14 @@ import io
 import PIL
 
 
-def simulate_focus(gds_file, focal_distance, wavelength, pix_size,
-                   cell=None, layer=None):
+def rasterize_zp(gds_file, pix_size, cell=None, layer=None):
     #
     # The procedure for rasterizing was inspired by:
     # https://github.com/HelgeGehring/gdshelpers/blob/master/gdshelpers/geometry/chip.py
     #
     # The problem is that matplotlib's rastering engine is not exactly precise,
     # so there might be pixel-level issues. I did my best to avoid them.
+    # 
 
     lib = gdstk.read_gds(gds_file)
 
@@ -56,21 +56,30 @@ def simulate_focus(gds_file, focal_distance, wavelength, pix_size,
     fig.set_dpi(300)
     size_um = np.asarray((xlim[1] - xlim[0], ylim[1] - ylim[0]))
     size_inch = size_um * 1e-6 / (pix_size * dpi)
-    print(size_inch)
-    print(dpi)
-    print(size_inch*dpi)
     fig.set_size_inches(size_inch)
     ax.set_position([0,0,1,1])
 
+
     bbox_inches = transforms.Bbox.from_extents([0,0,size_inch[0], size_inch[1]])
-    temp_file = io.BytesIO()
-    plt.savefig(temp_file, transparent=True, bbox_inches=bbox_inches,
-                dpi=dpi, format='png')
-    plt.close()
-    im = PIL.Image.open(temp_file)
-    np.array(im)
-    plt.imshow(im)
+    with io.BytesIO() as temp_file:
+        plt.savefig(temp_file, transparent=True, bbox_inches=bbox_inches,
+                    dpi=dpi, format='png')
+        plt.close()
+        with PIL.Image.open(temp_file) as im:
+            # The alpha layer contains the info we need
+            return np.array(im)[:,:,3] 
+
+
+def simulate_focus(gds_file, focal_distance, wavelength, pix_size,
+                   cell=None, layer=None):
+
+    rasterized_zp = rasterize_zp(gds_file, pix_size,
+                                 cell=cell, layer=layer)
+    print(rasterized_zp.shape)
+    plt.imshow(rasterized_zp, cmap='gray_r')
+    plt.colorbar()
     plt.show()
+    
 
 
 if __name__ == '__main__':

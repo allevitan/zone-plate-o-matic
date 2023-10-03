@@ -576,62 +576,22 @@ def design_grating_hologram(U_0,
             amplitude_output[s] = (loaded_array / max_abs).view(t.int16).numpy()
 
 
-def realize_design(filename, lr_filename, gds_filename,
+def realize_design(filename, gds_filename,
                    buttress_width=15e-9, grating_max=0.9,
-                   reduction_factor=8, chunk_size=2048, n_processes=6,
+                   chunk_size=2048, n_processes=6,
                    verbose=False, overlap=512, view=False):
     """Makes contours and the low resolution version"""
     with h5py.File(filename,'r') as f:
         step = float(f['step'][()])
         buttress_spacing = float(f['buttress_spacing'][()])
         buttress_fraction = buttress_width / (buttress_spacing)
+        offset = np.array(f['offset'])        
+
         shape = f['amplitude'].shape
         offset = np.array(f['offset'])
 
-        chunk_size = (chunk_size // reduction_factor) * reduction_factor
-        
-        if verbose:
-            print('Starting on the low res version')
-        # First, we generate the low resolution image
-        with h5py.File(lr_filename,'w') as lr_f:
-            lr_f.create_dataset('lr_rzp',
-                                dtype=np.float32,
-                                shape=(s//reduction_factor for s in shape),
-                                compression='lzf')
-            lr_f.create_dataset('step', data=[step*reduction_factor])
-            i_list = t.arange(propagation.get_num_tiles(shape[0], chunk_size))
-            j_list = t.arange(propagation.get_num_tiles(shape[1], chunk_size))
-            for i, j in it.product(i_list, j_list):
-                if verbose:
-                    print('Tile',float(i),float(j))
-                start_i = i * chunk_size
-                end_i = (i + 1) * chunk_size 
-                start_j = j * chunk_size
-                end_j = (j + 1) * chunk_size
-                
-                amplitude = np.array(f['amplitude']\
-                                     [start_i:end_i, start_j:end_j])
-                amplitude = t.as_tensor(amplitude).view(dtype=t.bfloat16)
-                grating = np.array(f['grating'][start_i:end_i, start_j:end_j])
-                grating = t.as_tensor(grating) / 127
-
-                # make the buttresses                
-                mask = ((amplitude >= grating_max * grating)
-                        * (grating >= 0)
-                        * (grating <= (1-buttress_fraction)))
-                
-                mask = mask.to(dtype=t.float32)
-                lr_mask = t.nn.functional.avg_pool2d(
-                    mask.unsqueeze(0).unsqueeze(0),
-                    reduction_factor)[0,0]
-
-                start_i = i * chunk_size//reduction_factor
-                end_i = (i + 1) * chunk_size//reduction_factor
-                start_j = j * chunk_size//reduction_factor
-                end_j = (j + 1) * chunk_size//reduction_factor
-                
-                lr_f['lr_rzp'][start_i:end_i, start_j:end_j] = lr_mask.numpy()
-
+        i_list = t.arange(propagation.get_num_tiles(shape[0], chunk_size))
+        j_list = t.arange(propagation.get_num_tiles(shape[1], chunk_size))
 
         def get_padded_chunk(i, j):
             pad_i = (overlap if i != 0 else 0)
@@ -651,7 +611,8 @@ def realize_design(filename, lr_filename, gds_filename,
             mask = mask.to(dtype=t.float32).numpy()
             return mask, pad_i, pad_j, start_i, start_j, chunk_size
 
-        print('Working on making contours')
+        if verbose:
+            print('Working on making contours')
         chunks = (get_padded_chunk(i,j) for i,j in it.product(i_list, j_list))
         with Pool(processes=n_processes) as pool:
             if verbose:
@@ -664,7 +625,8 @@ def realize_design(filename, lr_filename, gds_filename,
 
         contours = [c for contour_list in contour_lists for c in contour_list]
         
-        print('Now cleaning the contours')
+        if verbose:
+            print('Now cleaning the contours')
         final_contours = clean_contours_multiprocess(
             contours, n_processes=n_processes, show_progress=verbose)
         
