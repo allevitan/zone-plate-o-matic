@@ -9,10 +9,12 @@ Dates: January 2022 to September 2023
 """
 import gdstk
 import numpy as np
+import torch as t
 from matplotlib import pyplot as plt
 from matplotlib import patches, transforms
 import io
 import PIL
+from zpom import propagation
 
 
 def rasterize_zp(gds_file, pix_size, cell=None, layer=None):
@@ -67,23 +69,49 @@ def rasterize_zp(gds_file, pix_size, cell=None, layer=None):
         plt.close()
         with PIL.Image.open(temp_file) as im:
             # The alpha layer contains the info we need
-            return np.array(im)[:,:,3] 
+            offset = np.array([-ylim[1], xlim[0]]) * 1e-6
+            return (np.array(im)[:,:,3], offset)
 
 
-def simulate_focus(gds_file, focal_distance, wavelength, pix_size,
-                   cell=None, layer=None):
+def simulate_focus(gds_file,
+                   focal_distance,
+                   wavelength,
+                   pix_size,
+                   output_shape,
+                   offset=None,
+                   cell=None,
+                   layer=None,
+                   tile_shape=None,
+                   calculation_device=None,
+                   verbose=False):
 
-    rasterized_zp = rasterize_zp(gds_file, pix_size,
+    rasterized_zp, input_offset = rasterize_zp(gds_file, pix_size,
                                  cell=cell, layer=layer)
-    print(rasterized_zp.shape)
+    output_offset = - (np.array(output_shape)-1)/2
+    if offset is not None:
+        offset += np.array(offset) / pix_size
+    input_offset = input_offset / pix_size
+    offset = input_offset - output_offset
+    torch_zp = t.as_tensor(rasterized_zp).to(dtype=t.complex128)
+    focus = propagation.FFT_DI_tiled(torch_zp, focal_distance,
+                                     wavelength, [pix_size]*2,
+                                     offset=offset,
+                                     output_shape=output_shape,
+                                     calculation_device=calculation_device,
+                                     tile_shape=tile_shape, verbose=verbose)
+    focus = focus.cpu().numpy()
+    plt.figure()
     plt.imshow(rasterized_zp, cmap='gray_r')
+    plt.colorbar()
+    plt.figure()
+    plt.imshow(np.abs(focus))
     plt.colorbar()
     plt.show()
     
 
 
 if __name__ == '__main__':
-    test = '/Users/abe/switchdrive/20230928_Optic_Designs/Sunflower_RZP_dr=40.00nm_NF=6_focdiam=2.00um_GL=0.60_BW=20.00nm/masks/ZP017.gds'
+    test = '/Users/abe/switchdrive/20230928_Optic_Designs/Sunflower_RZP_dr=40.00nm_NF=6_focdiam=2.00um_GL=0.60_BW=20.00nm/masks/ZP015.gds'
 
-    simulate_focus(test, 1e-6, 2e-10, 10e-9)
+    simulate_focus(test, 25.6e-3, 2e-10, 10e-9, [2048, 2048], tile_shape=[2048,2048])
 

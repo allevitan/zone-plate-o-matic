@@ -4,6 +4,7 @@ import numpy as np
 from zpom.optic_design import *
 import argparse
 import os
+import shutil
 import gdstk
 
 def main():
@@ -21,6 +22,7 @@ def main():
     parser.add_argument('--output', '-o', type=str, help='The output folder nameto be used for the output gdsii and low-resolution mask files. There is a sensible default')
     args = parser.parse_args()
 
+    args.base_folder = args.base_folder.rstrip('/ ')
     if args.output is None:
         output = (args.base_folder + '_GL=%0.2f_BW=%0.2fnm'
                   % (args.grating_level, args.buttress_width))
@@ -31,6 +33,9 @@ def main():
     full_gds_file = output + '/full_mask.gds'
     gds_folder = output + '/masks/'
     os.mkdir(gds_folder)
+
+    shutil.copyfile(args.base_folder + '/ZPinfo.txt',
+                    output + '/ZPinfo.txt')
 
     file_list = [f for f in os.listdir(args.base_folder)
                  if f[-3:] == '.h5']

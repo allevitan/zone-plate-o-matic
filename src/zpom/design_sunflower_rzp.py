@@ -111,6 +111,29 @@ def main():
                            device=args.device,
                            buttress_deviation=0.01*args.buttress_deviation,
                            apodization_ratio=apodization_ratio)
+    
+    info_filename = output_filename + '/ZPinfo.txt'
+    with open(info_filename, 'w') as info_file:
+        print('This zone plate meets the following specifications:', file=info_file)
+        print('---------------------------------------------------', file=info_file)
+        print('Outer Zone Width (dr): %0.3f nm' % (dr*1e9), file=info_file)
+        print('Buttress Spacing: %0.3f' % (buttress_spacing*1e9), file=info_file)
+        print('Number of Frames:', args.n_frames, file=info_file)
+        print('Mini ZPs per frame:', args.mini_zps_per_frame, file=info_file)
+        print('Inner Zone Index:', args.inner_zone, file=info_file)
+        print('Mini ZP Spacing:', args.mini_zp_spacing, file=info_file)
+        print('Total Number of Zones:', NZ, file=info_file)
+        print('Design Wavelength: %0.3f nm' % (wavelength*1e9), file=info_file)
+        print('Design Energy: %0.3f eV' % (hc / wavelength), file=info_file)
+        print('Focal Distance at Design Wavelength: %0.3f mm' % (f* 1e3), file=info_file)
+        print('Focal Distance per Energy (A1): %0.3f um/eV' % (1e6*f * wavelength / hc), file=info_file)
+        print('Depth of Focus at Design Wavelength: +-%0.3f um' \
+              % (1e6*2*dr**2 / wavelength), file=info_file) 
+        print('Focal Spot Diameter: %0.3f um' % (focus_diameter * 1e6), file=info_file)
+        print('Optic Diameter: %0.3f um' % (optic_diameter*1e6), file=info_file)
+        print('Max Buttress Deviation: %0.1f%%' % (args.buttress_deviation), file=info_file)
+        print('Apodization Ratio:', apodization_ratio, file=info_file)
+        print('', flush=True)
             
 if __name__ == '__main__':
     main()
