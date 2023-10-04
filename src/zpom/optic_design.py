@@ -336,7 +336,8 @@ def design_sunflower_array(dr,
 
     # Calculation of the focal distance, including the n**2 * lambda**2 term in the zone plate equation
     NZ = inner_zone_index + (n_frames-1) * mini_zp_spacing + mini_zp_width
-    print('NZ', NZ)
+    if verbose:
+        print('NZ', NZ)
     a = wavelength**2
     b = 2 * NZ * wavelength**3 - 4 * dr**2 * NZ * wavelength
     c = NZ**2 * wavelength**2 * ( wavelength**2 - 4 * dr**2 / 2 )
@@ -528,8 +529,6 @@ def design_grating_hologram(U_0,
             zone_phase = 0.5 * perfect_zp_phase + 0.5 * t.angle(out_tile)
             
             new_zone_phase = (perfect_zp_phase + t.angle(out_tile))
-            
-            modified_radius = t.sqrt(new_zone_phase/coefficients[0] * f)
             
             buttress_regions = t.floor((t.log(Rs)-np.log(outer_r)) / np.log(1-buttress_deviation))
             nominal_Rs = t.exp(buttress_regions * np.log(1-buttress_deviation) + np.log(outer_r))
