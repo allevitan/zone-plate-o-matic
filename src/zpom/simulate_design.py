@@ -37,7 +37,7 @@ def rasterize_zp(gds_file, pix_size, cell=None, layer=None):
 
     for cell in cells:
         for polygon in cell.get_polygons(layer=layer):
-            patch = patches.Polygon(polygon.points+1, antialiased=True,
+            patch = patches.Polygon(polygon.points, antialiased=True,
                                     facecolor='k')
             ax.add_patch(patch)
 
@@ -55,7 +55,7 @@ def rasterize_zp(gds_file, pix_size, cell=None, layer=None):
     ax.set_xlim(xlim)
     ax.set_ylim(ylim)
     dpi = 300
-    fig.set_dpi(300)
+    fig.set_dpi(dpi)
     size_um = np.asarray((xlim[1] - xlim[0], ylim[1] - ylim[0]))
     size_inch = size_um * 1e-6 / (pix_size * dpi)
     fig.set_size_inches(size_inch)
@@ -73,20 +73,17 @@ def rasterize_zp(gds_file, pix_size, cell=None, layer=None):
             return (np.array(im)[:,:,3], offset)
 
 
-def simulate_focus(gds_file,
+def simulate_focus(rasterized_zp,
+                   input_offset,
                    focal_distance,
                    wavelength,
                    pix_size,
                    output_shape,
                    offset=None,
-                   cell=None,
-                   layer=None,
                    tile_shape=None,
                    calculation_device=None,
                    verbose=False):
-
-    rasterized_zp, input_offset = rasterize_zp(gds_file, pix_size,
-                                 cell=cell, layer=layer)
+    
     output_offset = - (np.array(output_shape)-1)/2
     if offset is not None:
         offset += np.array(offset) / pix_size
@@ -99,7 +96,24 @@ def simulate_focus(gds_file,
                                      output_shape=output_shape,
                                      calculation_device=calculation_device,
                                      tile_shape=tile_shape, verbose=verbose)
-    focus = focus.cpu().numpy()
+    return focus.cpu()
+
+    
+
+
+if __name__ == '__main__':
+    test = '/Users/abe/switchdrive/20230928_Optic_Designs/Sunflower_RZP_dr=40.00nm_NF=6_focdiam=2.00um_GL=0.60_BW=20.00nm/masks/ZP015.gds'
+    pix_size = 10e-9
+    rasterized_zp, input_offset = rasterize_zp(test, pix_size)
+    focus = simulate_focus(
+        rasterized_zp,
+        input_offset,
+        25.6e-3,
+        2e-10,
+        pix_size,
+        [2048, 2048],
+        tile_shape=[2048,2048])
+
     plt.figure()
     plt.imshow(rasterized_zp, cmap='gray_r')
     plt.colorbar()
@@ -107,11 +121,3 @@ def simulate_focus(gds_file,
     plt.imshow(np.abs(focus))
     plt.colorbar()
     plt.show()
-    
-
-
-if __name__ == '__main__':
-    test = '/Users/abe/switchdrive/20230928_Optic_Designs/Sunflower_RZP_dr=40.00nm_NF=6_focdiam=2.00um_GL=0.60_BW=20.00nm/masks/ZP015.gds'
-
-    simulate_focus(test, 25.6e-3, 2e-10, 10e-9, [2048, 2048], tile_shape=[2048,2048])
-

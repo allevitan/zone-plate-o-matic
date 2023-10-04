@@ -29,20 +29,12 @@ def main():
     gds_file = output + '.gds'
 
 
-    base_file_size = os.path.getsize(args.base_file) * 1e-9 # in GB
-    estimated_LR_size = base_file_size* 4 / (3 * args.reduction_factor**2)
-    
     with h5py.File(args.base_file,'r') as f:
         dr = float(f['dr'][()])
-        step = float(f['step'][()])
 
     buttress_width = args.buttress_width*1e-9
 
     print('Outer zone width %0.3f nm' % (1e9 * dr))    
-    print('Reduced resolution pixel size: %0.3f nm'
-          % (step * args.reduction_factor * 1e9))
-    print('Estimated uncompressed reduced resolution file size: %0.3f GB' %
-          estimated_LR_size)
     print('Buttress width: %0.3f nm' % (buttress_width * 1e9))
     print('Grating Level: %0.3f' % args.grating_level)
     print('')
