@@ -263,28 +263,26 @@ def inspect_sunflower_placement(design, pix_size=1e-6):
     plt.imshow(zp_mask)
     plt.colorbar()
 
-
-def design_sunflower_array(dr,
-                           n_frames,
-                           wavelength,
-                           focus_diameter,
-                           inner_zone_index,
-                           mini_zp_spacing,
-                           step,
-                           output_filename,
-                           dtype=t.complex128,
-                           tile_size=None,
-                           device='cpu',
-                           mini_zp_width=None,
-                           mini_zp_length_factor=1,
-                           mini_zps_per_frame=3,
-                           equal_width=True,
-                           phi_0=0,
-                           buttress_spacing=None,
-                           buttress_deviation=0.15,
-                           tiling_style='alternating',
-                           apodization_ratio=0,
-                           verbose=False,):
+def plan_sunflower_array(
+        dr,
+        n_frames,
+        wavelength,
+        focus_diameter,
+        inner_zone_index,
+        mini_zp_spacing,
+        step,
+        output_filename,
+        dtype=t.complex128,
+        mini_zp_width=None,
+        mini_zp_length_factor=1,
+        mini_zps_per_frame=3,
+        equal_width=True,
+        phi_0=0,
+        buttress_spacing=None,
+        buttress_deviation=0.15,
+        tiling_style='alternating',
+        apodization_ratio=0):
+    """Saves a sunflower zone plate array design plan to a file"""
 
     if mini_zp_width is None:
         mini_zp_width = mini_zp_spacing
@@ -300,13 +298,7 @@ def design_sunflower_array(dr,
         mini_zps_per_frame=mini_zps_per_frame,
         equal_width=equal_width,
         phi_0=phi_0)
-    
-    os.mkdir(output_filename)
 
-    # We make one design focal spot which corresponds to the focal spot of the
-    # full zp array, if it wasn't broken into separate bits. We'll then use
-    # this same focal spot for each mini-ZP, but all the mini-ZPs will get
-    # different sections of the ZP in Fourier space.
 
     # The real-valued dtype corresponding to the given complex-valued dtype.
     real_dtype = t.real(t.ones(1,dtype=dtype)).dtype
@@ -316,9 +308,6 @@ def design_sunflower_array(dr,
     base_input_shape = [int(focus_diameter // dr) + 1]*2
     U_0 = t.exp(2j*np.pi*t.rand(*base_input_shape,
                                 dtype=real_dtype))
-
-    if verbose:
-        print('Focal Spot Diameter',focus_diameter*1e6,'um', flush=True)
 
     # And we upsample it to the full resolution of our final design file
     input_shape = [int(focus_diameter // step) + 1]*2
@@ -334,59 +323,119 @@ def design_sunflower_array(dr,
     U_0[Rs2>(focus_diameter/2)**2] = 0
     del Xs, Ys, Rs2
 
-    # Calculation of the focal distance, including the n**2 * lambda**2 term in the zone plate equation
+    # Calculation of the focal distance, including the
+    # n**2 * lambda**2 term in the zone plate equation
     NZ = inner_zone_index + (n_frames-1) * mini_zp_spacing + mini_zp_width
-    if verbose:
-        print('NZ', NZ)
+
     a = wavelength**2
     b = 2 * NZ * wavelength**3 - 4 * dr**2 * NZ * wavelength
     c = NZ**2 * wavelength**2 * ( wavelength**2 - 4 * dr**2 / 2 )
-    f = (-b + np.sqrt(b**2 - 4 * a * c)) / (2 * a)
-    # f =  dr**2 * 4 * NZ / wavelength ## This is the simplified calculation that's usually used
+    f = (-b + np.sqrt(b**2 - 4 * a * c)) / (2 * a)\
+    
+    hc = 1.23984e-6 # in m*eV
+    
+    design_energy = hc / wavelength
+    A1 = f * wavelength / hc
+    optic_diameter = 4 * NZ * dr
+    
+    with h5py.File(output_filename, 'w') as output:
+        output.create_dataset('design_focus', data=U_0.numpy())
+        output.create_dataset('pix_size', data=[step])
+        output.create_dataset('outer_zone_width', data=[dr])
+        output.create_dataset('n_frames', data=[n_frames])
+        output.create_dataset('n_zps_per_frame', data=[mini_zps_per_frame])
+        output.create_dataset('design_wavelength', data=[wavelength])
+        output.create_dataset('design_energy', data=[design_energy])
+        output.create_dataset('focus_diameter', data=[focus_diameter])
+        output.create_dataset('inner_zone_index', data=[inner_zone_index])
+        output.create_dataset('zp_spacing', data=[mini_zp_spacing])
+        output.create_dataset('zp_width', data=[mini_zp_width])
+        output.create_dataset('zp_length_factor', data=[mini_zp_length_factor])
+        output.create_dataset('equal_width', data=[equal_width])
+        output.create_dataset('phi_0', data=[phi_0])
+        output.create_dataset('buttress_spacing', data=[buttress_spacing])
+        output.create_dataset('buttress_deviation', data=[buttress_deviation])
+        output.create_dataset('tiling_style', data=tiling_style)
+        output.create_dataset('apodization_ratio', data=[apodization_ratio])
+        output.create_dataset('design_focal_distance', data=[f])
+        output.create_dataset('A1', data=[A1])
+        output.create_dataset('optic_diameter', data=[optic_diameter])
+        output.create_dataset('total_n_zones', data=[NZ])
+        
+        for idx, zp in enumerate(zp_locations):
+            grp = output.create_group('ZP%03d' % idx)
+            for key in zp.keys():
+                grp.create_dataset(key, data=[zp[key]])
 
-    for id, mini_zp in enumerate(zp_locations):
-        if verbose:
-            print('Working on Mini ZP %d of %d (ZP%03d).' % (id+1, len(zp_locations), id))
 
-        mini_zp_filename = output_filename + ('/ZP%03d.h5' % id)
-        # First we have to set up the window and window function
-        x = mini_zp['x']
-        y = mini_zp['y']
-        r = mini_zp['radius']
+def design_sunflower_array(plan_file, zone_plate_index,
+                           output_file,
+                           tile_size=None,
+                           device='cpu',
+                           verbose=False):
+
+    # TODO: allow a few overrides, for example the buttress spacing or
+    # deviation
+
+    with h5py.File(plan_file, 'r') as plan:
+        U_0 = t.as_tensor(np.array(plan['design_focus']))
+        dtype = U_0.dtype
+        f = float(np.array(plan['design_focal_distance'])[()])
+        dr = float(np.array(plan['outer_zone_width'])[()])
+        focus_diameter = float(np.array(plan['focus_diameter'])[()])
+        wavelength = float(np.array(plan['design_wavelength'])[()])
+        step = float(np.array(plan['pix_size'])[()])
+        buttress_spacing = float(np.array(plan['buttress_spacing'])[()])
+        buttress_deviation = float(np.array(plan['buttress_deviation'])[()])
+        apodization_ratio = float(np.array(plan['apodization_ratio'])[()])
+        
+        tiling_style = plan['tiling_style'][()].decode()
+
+        mini_zp = plan['ZP%03d/' % zone_plate_index]
+        x = float(np.array(mini_zp['x'])[()])
+        y = float(np.array(mini_zp['y'])[()])
+        r = float(np.array(mini_zp['radius'])[()])
         window = ((x - r, x + r), (y - r, y + r))
+        inner_r = float(np.array(mini_zp['inner_r'])[()])
+        outer_r = float(np.array(mini_zp['outer_r'])[()])
+        
+    if not os.path.exists(output_file):
+        os.mkdir(output_file)
 
-        def window_function(X, Y, Angle, R):
-            radial_band = t.logical_and(R > mini_zp['inner_r'], R < mini_zp['outer_r'])
-            mini_R = t.sqrt((X-x)**2 + (Y-y)**2)
-            disk = mini_R < r
-            return t.logical_and(radial_band, disk)
+    if not os.path.isdir(output_file):
+        raise FileExistsError('Output design folder already exists but is not a directory')
+    
+    zp_filename = output_file + ('/ZP%03d.h5' % zone_plate_index)
         
+    def window_function(X, Y, Angle, R):
+        radial_band = t.logical_and(R > inner_r, R < outer_r)
+        mini_R = t.sqrt((X-x)**2 + (Y-y)**2)
+        disk = mini_R < r
+        return t.logical_and(radial_band, disk)
         
-        design_grating_hologram(U_0,
-                                f,
-                                window,
-                                window_function,
-                                wavelength,
-                                step,
-                                mini_zp_filename,
-                                dtype=dtype,
-                                device=device,
-                                tile_size=tile_size,
-                                buttress_spacing=buttress_spacing,
-                                buttress_deviation=buttress_deviation,
-                                outer_r=mini_zp['outer_r'],
-                                tiling_style=tiling_style,
-                                verbose=verbose)
+    design_grating_hologram(U_0,
+                            f,
+                            window,
+                            window_function,
+                            wavelength,
+                            step,
+                            zp_filename,
+                            dtype=dtype,
+                            device=device,
+                            tile_size=tile_size,
+                            buttress_spacing=buttress_spacing,
+                            buttress_deviation=buttress_deviation,
+                            outer_r=outer_r,
+                            tiling_style=tiling_style,
+                            verbose=verbose)
         
-        with h5py.File(mini_zp_filename, 'r+') as output:
-            apodization_ratio = apodization_ratio
-            output.create_dataset('dr', data=[dr])
-            output['dr'].attrs['units'] = 'm'
-            output.create_dataset('focus_diameter', data=[focus_diameter])
-            output['focus_diameter'].attrs['units'] = 'm'
-            output.create_dataset('buttress_spacing', data=[buttress_spacing])
-            output.create_dataset('buttress_deviation', data=[buttress_deviation])
-            output.create_dataset('apodization_ratio', data=[apodization_ratio])
+    with h5py.File(zp_filename, 'r+') as output:
+        apodization_ratio = apodization_ratio
+        output.create_dataset('outer_zone_width', data=[dr])
+        output.create_dataset('focus_diameter', data=[focus_diameter])
+        output.create_dataset('buttress_spacing', data=[buttress_spacing])
+        output.create_dataset('buttress_deviation', data=[buttress_deviation])
+        output.create_dataset('apodization_ratio', data=[apodization_ratio])
 
     
     
