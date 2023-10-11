@@ -3,9 +3,11 @@ import torch as t
 import numpy as np
 from zpom.optic_design import *
 import argparse
+from time import time
 
 def main():
 
+    start = time()
     parser = argparse.ArgumentParser(
         prog='design_sunflower_rzp',
         description='Makes the large, raster, base design file for a specified sunflower-style randomized zone plate. Please contact Abraham Levitan (allevitan@gmail.com) for help.')
@@ -20,6 +22,8 @@ def main():
 
     args = parser.parse_args()
     
+    print('N GPUs:', t.cuda.device_count(), flush=True)
+
     with h5py.File(args.plan_file, 'r') as plan:
         U_0 = t.as_tensor(np.array(plan['design_focus']))
         dtype = U_0.dtype
@@ -87,6 +91,8 @@ def main():
                            tile_size = args.tile_size,
                            device = args.device,
                            verbose=True)
+    end = time()
+    print('Total wall clock time:', end-start, 'seconds', flush=True)
 
             
 if __name__ == '__main__':
