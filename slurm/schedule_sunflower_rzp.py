@@ -38,7 +38,6 @@ design_job = [
     args.plan_file
 ]
 
-print(design_job)
 slurm_output = subprocess.check_output(design_job).decode()
 
 job_id = int(slurm_output.split(' ')[-1])
