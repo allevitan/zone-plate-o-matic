@@ -28,12 +28,12 @@ setuptools.setup(
     package_dir={"": "src"},
    entry_points = {
         'console_scripts' : [
-            'plan-sunflower-rzp = zpom.plan_sunflower_rzp:main',
-            'design-rzp = zpom.design_rzp:main',
-            'design-sunflower-rzp = zpom.design_sunflower_rzp:main',
-            'realize-design = zpom.realize_design:main',
-            'realize-sunflower-design = zpom.realize_sunflower_design:main',
-            'collate-sunflower-design = zpom.collate_sunflower_design:main']
+            'plan-sunflower-rzp = zpom.scripts.plan_sunflower_rzp:main',
+            'design-rzp = zpom.scripts.design_rzp:main',
+            'design-sunflower-rzp = zpom.scripts.design_sunflower_rzp:main',
+            'realize-design = zpom.scripts.realize_design:main',
+            'realize-sunflower-design = zpom.scripts.realize_sunflower_design:main',
+            'collate-sunflower-design = zpom.scripts.collate_sunflower_design:main']
         },
     classifiers=[
         "Programming Language :: Python :: 3",
