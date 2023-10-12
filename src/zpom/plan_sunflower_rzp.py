@@ -60,7 +60,7 @@ def main():
     print('\nDesigning a zone plate to the following specifications:')
     print('-------------------------------------------------------')
     print('Outer Zone Width (dr): %0.3f nm' % (dr*1e9))
-    print('Buttress Spacing: %0.3f' % (buttress_spacing*1e9))
+    print('Buttress Spacing: %0.3f nm' % (buttress_spacing*1e9))
     print('Number of Frames:', args.n_frames)
     print('Mini ZPs per frame:', args.mini_zps_per_frame)
     print('Inner Zone Index:', args.inner_zone)
