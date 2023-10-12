@@ -664,9 +664,14 @@ def realize_design(filename, gds_filename,
         chunks = (get_padded_chunk(i,j) for i,j in it.product(i_list, j_list))
         with Pool(processes=n_processes) as pool:
             if verbose:
-                contour_lists = tqdm.tqdm(
-                    pool.starmap(process_contours, chunks, chunksize=1),
-                    total=(len(i_list)*len(j_list)), miniters=1)
+                # We use tqdm on the inputs because starmap waits until
+                # the end to return anything
+                tqdm_chunks = tqdm.tqdm(chunks, 
+                                        total=(len(i_list)*len(j_list)),
+                                        miniters=1)
+                contour_lists = \
+                    pool.starmap(process_contours, tqdm_chunks, chunksize=1)
+                    
             else:
                 contour_lists = pool.starmap(process_contours, chunks,
                                              chunksize=1)

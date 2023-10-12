@@ -32,7 +32,8 @@ setuptools.setup(
             'design-rzp = zpom.design_rzp:main',
             'design-sunflower-rzp = zpom.design_sunflower_rzp:main',
             'realize-design = zpom.realize_design:main',
-            'realize-sunflower-design = zpom.realize_sunflower_design:main']
+            'realize-sunflower-design = zpom.realize_sunflower_design:main',
+            'collate-sunflower-design = zpom.collate_sunflower_design:main']
         },
     classifiers=[
         "Programming Language :: Python :: 3",
