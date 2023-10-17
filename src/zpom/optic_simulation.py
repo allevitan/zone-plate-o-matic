@@ -99,25 +99,3 @@ def simulate_focus(rasterized_zp,
     return focus.cpu()
 
     
-
-
-if __name__ == '__main__':
-    test = '/Users/abe/switchdrive/20230928_Optic_Designs/Sunflower_RZP_dr=40.00nm_NF=6_focdiam=2.00um_GL=0.60_BW=20.00nm/masks/ZP015.gds'
-    pix_size = 10e-9
-    rasterized_zp, input_offset = rasterize_zp(test, pix_size)
-    focus = simulate_focus(
-        rasterized_zp,
-        input_offset,
-        25.6e-3,
-        2e-10,
-        pix_size,
-        [2048, 2048],
-        tile_shape=[2048,2048])
-
-    plt.figure()
-    plt.imshow(rasterized_zp, cmap='gray_r')
-    plt.colorbar()
-    plt.figure()
-    plt.imshow(np.abs(focus))
-    plt.colorbar()
-    plt.show()
