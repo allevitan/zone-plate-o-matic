@@ -31,7 +31,13 @@ def main():
         output=args.output
 
     if not os.path.exists(output):
-        os.mkdir(output)
+        # It appears that in a HPC environment, if many jobs are launched at
+        # the same time, sometimes os.path.exists(output) will return false
+        # when in reality the folder exists. So, we also do a try/except here
+        try:
+            os.mkdir(output)
+        except FileExistsError():
+            pass
 
     if not os.path.isdir(output):
         raise FileExistsError('Output folder already exists but is not a directory')

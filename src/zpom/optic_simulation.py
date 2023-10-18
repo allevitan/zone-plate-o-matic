@@ -14,10 +14,12 @@ from matplotlib import pyplot as plt
 from matplotlib import patches, transforms
 import io
 import PIL
+# May need to be updated if the ZP is too large
+PIL.Image.MAX_IMAGE_PIXELS = 1000000000 
 from zpom import propagation
+from tqdm import tqdm
 
-
-def rasterize_zp(gds_file, pix_size, cell=None, layer=None):
+def rasterize_zp(gds_file, pix_size, cell=None, layer=None, verbose=False):
     #
     # The procedure for rasterizing was inspired by:
     # https://github.com/HelgeGehring/gdshelpers/blob/master/gdshelpers/geometry/chip.py
@@ -35,11 +37,19 @@ def rasterize_zp(gds_file, pix_size, cell=None, layer=None):
 
     fig, ax = plt.subplots()
 
+    print('Populating the polygons')
     for cell in cells:
-        for polygon in cell.get_polygons(layer=layer):
+        print('Working on', cell)
+        if verbose:
+            to_iter = tqdm(cell.get_polygons(layer=layer))
+        else:
+            to_iter = cell.get_polygons(layer=layer)
+        for polygon in to_iter:
             patch = patches.Polygon(polygon.points, antialiased=True,
                                     facecolor='k')
             ax.add_patch(patch)
+
+    print('Polygons populated')
 
     ax.set_aspect(1)
     ax.autoscale(True, tight=True)  
@@ -61,11 +71,13 @@ def rasterize_zp(gds_file, pix_size, cell=None, layer=None):
     fig.set_size_inches(size_inch)
     ax.set_position([0,0,1,1])
 
-
+    
     bbox_inches = transforms.Bbox.from_extents([0,0,size_inch[0], size_inch[1]])
     with io.BytesIO() as temp_file:
+        print('Rasterizing plot')
         plt.savefig(temp_file, transparent=True, bbox_inches=bbox_inches,
                     dpi=dpi, format='png')
+        print('Plot rasterized')
         plt.close()
         with PIL.Image.open(temp_file) as im:
             # The alpha layer contains the info we need

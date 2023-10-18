@@ -400,7 +400,13 @@ def design_sunflower_array(plan_file, zone_plate_index,
         outer_r = float(np.array(mini_zp['outer_r'])[()])
         
     if not os.path.exists(output_file):
-        os.mkdir(output_file)
+        # It appears that in a HPC environment, if many jobs are launched at
+        # the same time, sometimes os.path.exists(output) will return false
+        # when in reality the folder exists. So, we also do a try/except here
+        try:
+            os.mkdir(output_file)
+        except FileExistsError():
+            pass
 
     if not os.path.isdir(output_file):
         raise FileExistsError('Output design folder already exists but is not a directory')
