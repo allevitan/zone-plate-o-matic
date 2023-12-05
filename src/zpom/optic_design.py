@@ -464,13 +464,13 @@ def design_grating_hologram(U_0,
                             tile_size=None, 
                             buttress_spacing=None,
                             buttress_deviation=0.15, # max deviation allowed from the defined buttress spacing
-                            outer_r=None, # Definition of the outer position where the buttress spacing is correct, default is the edge of the window.
+                            outer_r=None, # Definition of the outer radius where the buttress spacing is correct, default is the edge of the window.
                             tiling_style='alternating',
                             compression='lzf',
                             verbose=False):
 
-    # The COM of the input window is defined as (0,0), and the output window is defined
-    # with respect to that.
+    # The COM of the input window is defined as (0,0), and the output window
+    # is defined with respect to that.
     input_shape = list(U_0.shape)
     
     full_xs = t.arange(int(window[0][0]/step), int(window[0][1]/step)) * step
@@ -574,27 +574,36 @@ def design_grating_hologram(U_0,
             # Now we set up the grating
             # The following line is formally correct:
             # 
-            # perfect_zp_phase = np.sqrt(f**2 + Rs2) * (2*np.pi/wavelength)
-            # 
-            # But, it's actually better to use the taylor series because f is
-            # usually far larger than R, and so we run into issues with 
-            # numerical precision pretty quickly, even for 64-bit floats
+            # perfect_zp_phase_base = ((np.sqrt(f**2 + Rs2) - f) 
+            #     * (2*np.pi/wavelength))
 
-            order = 4
-            coefficients = [1/2,-1/8,1/16,-5/128,7/256,-21/1024,
-                            33/2048, -429/32768, 715/65536, -2431/262144]
-            coefficients = [c * 2 * np.pi/wavelength for c in coefficients]
-            perfect_zp_phase = sum(coefficients[n] * Rs2**(n+1) / (f**(2*n+1))
-                                   for n in range(order))
-            
+            # But, it's better to use the form below, because the form above
+            # will lead to numerical stability issues when f >> R, commonly
+            # the case. They are equivalent for calculations with reals.
+
+            perfect_zp_phase = (2*np.pi/wavelength) * (
+                Rs2 / (np.sqrt(f**2 + Rs**2) + f))
+
+            # This creates an "effective zone phase" which is constant within
+            # each zone, and jumps sharply at the zone transition. This is
+            # useful for constructing a globally consistent pattern of
+            # buttresses out of only locally available information.
             zone_phase = 0.5 * perfect_zp_phase + 0.5 * t.angle(out_tile)
             
-            new_zone_phase = (perfect_zp_phase + t.angle(out_tile))
+            # Another use for it is constructing a quantity which is always
+            # very close to the radius, but only jumps at zone transitions.
+            # This lets us do nice stuff like dice the ZP up into radial
+            # zones, making sure that the transitions always occur away from
+            # patterned zones
+            effective_Rs =  ( np.sqrt(zone_phase * wavelength / np.pi) *
+                     np.sqrt((zone_phase * wavelength / np.pi) + 2*f))
             
-            buttress_regions = t.floor((t.log(Rs)-np.log(outer_r)) / np.log(1-buttress_deviation))
-            nominal_Rs = t.exp(buttress_regions * np.log(1-buttress_deviation) + np.log(outer_r))
+            buttress_regions = t.floor((t.log(effective_Rs)-np.log(outer_r))
+                                       / np.log(1-buttress_deviation))
+            nominal_Rs = t.exp(buttress_regions * np.log(1-buttress_deviation)
+                               + np.log(outer_r))
             grating_phase = Angles * 2 * np.pi * nominal_Rs / buttress_spacing
-
+            
             if tiling_style.lower() == 'simple':
                 grating = t.remainder(grating_phase/np.pi, 2) - 1
             elif tiling_style.lower() == 'alternating':
