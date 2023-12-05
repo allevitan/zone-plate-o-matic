@@ -94,18 +94,24 @@ def design_rzp(dr,
 
     def window_function(X,Y, Angle, R):
         # TODO: This function needs to also include the apodization
-        return  t.logical_and(R > bs_ratio * optic_r, R < optic_r)
+        window = t.logical_and(R > bs_ratio * optic_r, R < optic_r)
 
-        # if apodize!=0:
-        #     outer_edge = t.logical_and(Rs > (optic_r - apodize),
-        #                                Rs < optic_r).to(device=out_tile.device)
-        #     inner_edge = t.logical_and(Rs < (bs_r + apodize),
-        #                                Rs > bs_r)
-        #     # This is a Tukey window
-        #     out_tile[outer_edge] *= (1 - t.cos(
-        #         np.pi * (Rs[outer_edge] - optic_r) / apodize))/2
-        #     out_tile[inner_edge] *= (1 - t.cos(
-        #     np.pi * (Rs[inner_edge] - bs_r) / apodize))/2
+        if apodization_ratio!=0:
+            window = window.to(dtype=R.dtype)
+            
+            aw = apodization_width # just a shorthand
+            bs_r = bs_ratio * optic_r
+
+            outer_edge = t.logical_and(R > (optic_r - aw), R < optic_r)
+            inner_edge = t.logical_and(R < (bs_r + aw), R > bs_r)
+            
+            # This is a Tukey window
+            window[outer_edge] *= \
+                (1 - t.cos(np.pi * (R[outer_edge] - optic_r) / aw) ) / 2
+            window[inner_edge] *= \
+                (1 - t.cos(np.pi * (R[inner_edge] - bs_r) / aw) ) / 2
+
+        return window
 
     # This populates the design file
     design_grating_hologram(U_0,
