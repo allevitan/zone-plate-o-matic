@@ -17,6 +17,7 @@ def main():
     parser.add_argument('base_folder', type=str, help='The base rzp design folder')
     parser.add_argument('grating_level', type=float, help='The fraction of the max amplitude to saturate at. Setting this to 1 provides best quality, at the expense of efficiency. 0.6 is usually a reasonable middle ground, and 0 produces a zone plate without any amplitude variation.')
     parser.add_argument('buttress_width', type=float, help='The width of the buttresses, in nm. 0 will produce no buttresses')
+    # TODO: zone plate index argument doesn't work
     parser.add_argument('--zone_plate_index', '-n', type=int, default=None, help='The index of the zone plate to design within the full array. Default is all zone plates.')
     parser.add_argument('--n_processes', '-np', type=int, default=1, help='The number of simultaneous processes to run, default=1')
     parser.add_argument('--chunk_size', type=int, default=4096, help='The chunk size for loading and processing the files, default is 4096')

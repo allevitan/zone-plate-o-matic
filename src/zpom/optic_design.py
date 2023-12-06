@@ -418,13 +418,46 @@ def design_sunflower_array(plan_file, zone_plate_index,
         raise FileExistsError('Output design folder already exists but is not a directory')
     
     zp_filename = output_file + ('/ZP%03d.h5' % zone_plate_index)
-        
+
+    # This should be equivalent to the form given in the "normal" design
+    # code, under the paraxial approximation. But, this one only relies on
+    # parameters that still have clear meaning for the sunflower RZP
+    # It's just the apodization_ratio multiplied by an estimate of the
+    # speckle size in the optic plane
+    apodization_width = apodization_ratio * 2 * (
+        f * wavelength / focus_diameter)
+    
     def window_function(X, Y, Angle, R):
         radial_band = t.logical_and(R > inner_r, R < outer_r)
         mini_R = t.sqrt((X-x)**2 + (Y-y)**2)
         disk = mini_R < r
-        return t.logical_and(radial_band, disk)
-        
+        window =  t.logical_and(radial_band, disk)
+
+        if apodization_ratio!=0:
+            window = window.to(dtype=R.dtype)
+            
+            aw = apodization_width # just a shorthand
+            
+            outer_edge = t.logical_and(R > (outer_r - aw), R < outer_r)
+            inner_edge = t.logical_and(R < (inner_r + aw), R > inner_r)
+            radial_band = t.logical_and(mini_R > (r - aw), mini_R < r)
+            
+            # This is a Tukey window
+            window[outer_edge] *= \
+                (1 - t.cos(np.pi * (R[outer_edge] - outer_r) / aw) ) / 2
+            window[inner_edge] *= \
+                (1 - t.cos(np.pi * (R[inner_edge] - inner_r) / aw) ) / 2
+            window[radial_band] *= \
+                (1 - t.cos(np.pi * (mini_R[radial_band] - r) / aw) ) / 2
+
+            # There will be overlaps between the radial band and both the
+            # inner and outer edges. I think that just multiplying the
+            # relevant Tukey windows will create something that is at
+            # least still has a continuous derivative everywhere
+            
+        return window
+
+    
     design_grating_hologram(U_0,
                             f,
                             window,
