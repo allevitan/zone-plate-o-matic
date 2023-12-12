@@ -411,7 +411,8 @@ def design_sunflower_array(plan_file, zone_plate_index,
         # when in reality the folder exists. So, we also do a try/except here
         try:
             os.mkdir(output_file)
-        except FileExistsError():
+        except:
+            print('Caught an exception trying to make the folder')
             pass
 
     if not os.path.isdir(output_file):

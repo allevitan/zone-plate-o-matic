@@ -14,7 +14,7 @@ parser.add_argument('n_zps', type=int, help='The total number of zps in the plan
 parser.add_argument('grating_level', type=float, help='The fraction of the max amplitude to saturate at. Setting this to 1 provides best quality, at the expense of efficiency. 0.6 is usually a reasonable middle ground, and 0 produces a zone plate without any amplitude variation.')
 parser.add_argument('buttress_width', type=float, help='The width of the buttresses, in nm. 0 will produce no buttresses')
 parser.add_argument('--gpu', action='store_true', help='Whether to use the GPUs for the design phase.')
-parser.add_argument('--n_processes', '-np', type=int, default=6, help='The number of processes to allocated to the realization stage.')
+parser.add_argument('--n_processes', '-np', type=int, default=6, help='The number of processes to allocated to the realization stage, default of 6.')
 parser.add_argument('--design-time','-dt', type=str, default=None, help='Time limit per design step. Default is default for the day queue on cpu or default for the gpu-week queue on gpu.')
 parser.add_argument('--realize-time','-rt', type=str, default=None, help='Time limit per design step. Default is default for the day queue.')
 

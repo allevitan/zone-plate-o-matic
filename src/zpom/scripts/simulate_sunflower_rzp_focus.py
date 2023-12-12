@@ -46,7 +46,7 @@ def main():
             # when in reality the folder exists. So, we also do a try/except
             try:
                 os.mkdir(args.mask_folder + '/focal_spots')
-            except FileExistsError():
+            except:
                 pass            
 
     else:

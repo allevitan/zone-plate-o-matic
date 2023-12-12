@@ -37,19 +37,22 @@ def main():
         # when in reality the folder exists. So, we also do a try/except here
         try:
             os.mkdir(output)
-        except FileExistsError():
+        except:
             pass
 
     if not os.path.isdir(output):
-        raise FileExistsError('Output folder already exists but is not a directory')
+        raise OSError('Output folder already exists but is not a directory')
 
     full_gds_file = output + '/full_mask.gds'
     gds_folder = output + '/masks/'
     if not os.path.exists(gds_folder):
-        os.mkdir(gds_folder)
+        try:
+            os.mkdir(gds_folder)
+        except:
+            pass
 
     if not os.path.isdir(gds_folder):
-        raise FileExistsError('Mask folder already exists but is not a directory')
+        raise OSError('Mask folder already exists but is not a directory')
 
     file_list = [f for f in os.listdir(args.base_folder)
                  if f[-3:] == '.h5']

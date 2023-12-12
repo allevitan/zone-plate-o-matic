@@ -19,7 +19,7 @@ def main():
     parser.add_argument('step', type=float, help='The step size of the output array in real space, in nanometers. Typically, 1/10 of the outer zone width is the minimum for good performance')
     parser.add_argument('--apodization_ratio', '-ar', type=float, default=2, help='The apodization ratio used to apodize the output ZP. 2 is the default, and is good for most scenarios')
     parser.add_argument('--device', type=str, default='cpu', help='The device to perform the light propagation step on, default is cpu')
-    parser.add_argument('--tile_size', '-ts', type=int, default=4098, help='The size of the tiles to use for the various computation steps, default=4098. Larger tiles are more efficient in many cases, provided there is sufficient memory available.')
+    parser.add_argument('--tile_size', '-ts', type=int, default=4096, help='The size of the tiles to use for the various computation steps, default=4096. Larger tiles are more efficient in many cases, provided there is sufficient memory available.')
     parser.add_argument('--buttress_deviation', '-bd', type=float, default=15, help='The maximum deviation allowed (in %%) from the true buttress spacing before a new zone is created.')
     parser.add_argument('--beamstop_ratio', '-bsr', type=float, default=0.5, help='The beamstop diameter, as a fraction of the overall diameter. 0.5 is the default')
     parser.add_argument('--yes', '-y', action='store_true', help='Automatically confirms the parameters, good for HPC environments or batch computing.')
@@ -40,8 +40,6 @@ def main():
     f = 4 * NZ * dr**2 / wavelength # focal length
 
     hc = 1.23984e-6 # in m*eV
-
-    print((f * wavelength / hc))
 
     if args.output is None:
         output_filename = 'RZP_dr=%0.2fnm_NZ=%d_NS=%d.h5' % (dr*1e9, NZ, NS)
