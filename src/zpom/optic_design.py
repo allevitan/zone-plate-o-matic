@@ -113,7 +113,7 @@ def design_rzp(dr,
 
         return window
 
-    # This populates the design file
+   # This populates the design file
     design_grating_hologram(U_0,
                             f,
                             window,
@@ -564,15 +564,19 @@ def design_grating_hologram(U_0,
         output_js = t.arange(propagation.get_num_tiles(output_shape[1], tile_shape[1]))
         input_is = t.arange(propagation.get_num_tiles(U_0.shape[0], tile_shape[0]))
         input_js = t.arange(propagation.get_num_tiles(U_0.shape[1], tile_shape[1]))
-        combos = it.product(input_is, input_js, output_is, output_js)
-        n = len(output_is)*len(output_js)*len(input_is)*len(input_js)
+        # For input, it has to be a list, because we're going to iterate
+        # over it repeatedly
+        input_combos = list(it.product(input_is, input_js))
+        output_combos = list(it.product(output_is, output_js))
+        n_input = len(input_is)*len(input_js)
+        n_output = len(output_is)*len(output_js)
         
-        for idx, (in_i, in_j, out_i, out_j) in enumerate(combos):
-
+        for idx, (out_i, out_j) in enumerate(output_combos):
             if verbose:
-                print('Working on tile',idx+1,'of',n, flush=True)
+                print('Working on output tile', idx+1,'of',n_output, flush=True)
 
-            # We calculate the window function first, because if it's all zeroes we don't
+            # We calculate the window function first,
+            # because if it's all zeroes we don't
             # even need to do the full calculation
             xs = full_xs[0] + t.arange(out_i*tile_shape[0],
                                        (out_i + 1) * tile_shape[0]) * step[0]
@@ -584,23 +588,47 @@ def design_grating_hologram(U_0,
             Rs = t.sqrt(Rs2)            
             window_fn_output = window_function(Xs,Ys,Angles,Rs)
 
-            in_tile = t.zeros(tile_shape, dtype=dtype, device=U_0.device)
-            in_selection = U_0[in_i*tile_shape[0]:(in_i+1) * tile_shape[0],
-                               in_j*tile_shape[1]:(in_j+1) * tile_shape[1]]
-            # What this does is ensure a standard size, even when the 
-            # selection overlaps the edge.
-            in_tile[:in_selection.shape[0],
-                    :in_selection.shape[1]] = in_selection
-            tile_offset = [(in_i - out_i) * tile_shape[0] + base_offset[0],
-                           (in_j - out_j) * tile_shape[1] + base_offset[1]]
+            # We allocate this outside of the inner, "in_i/in_j" loop, so
+            # that we can always be adding to it.
+            out_tile = t.zeros(tile_shape, dtype=dtype, device=U_0.device)
+
             if t.all(t.eq(window_fn_output,0)):
                 # No point in doing the expensive calculation if it's all just
                 # going to be masked off
-                out_tile = in_tile * 0
+                if verbose:
+                    print('Output tile fully masked; skipping', flush=True)
+
             else:
-                out_tile = propagation.FFT_DI(in_tile.to(device=device),
-                                              -f, wavelength, step,
-                                              offset=tile_offset).cpu()
+
+                # Now we have to iterate through all the input tiles to get
+                # the full output wavefield
+                for in_idx, (in_i, in_j) in enumerate(input_combos):
+                    if verbose:
+                        print('Working on input tile', in_idx+1,
+                              'of', n_input, flush=True)
+            
+
+                    # We allocate a tile for the input and then fill it
+                    # What this does is ensure a standard size, even when the 
+                    # selection overlaps the edge.
+                    in_tile = t.zeros(tile_shape, dtype=dtype,
+                                      device=U_0.device)
+                    in_selection = U_0[in_i*tile_shape[0]:
+                                       (in_i+1) * tile_shape[0],
+                                       in_j*tile_shape[1]:
+                                       (in_j+1) * tile_shape[1]]
+
+                    in_tile[:in_selection.shape[0],
+                            :in_selection.shape[1]] = in_selection
+                    
+                    tile_offset = [(in_i - out_i) * tile_shape[0]
+                                   + base_offset[0],
+                                   (in_j - out_j) * tile_shape[1]
+                                   + base_offset[1]]
+                    
+                    out_tile += propagation.FFT_DI(in_tile.to(device=device),
+                                                   -f, wavelength, step,
+                                                   offset=tile_offset).cpu()
            
                 out_tile[window_fn_output == 0] = 0
             

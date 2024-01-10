@@ -34,7 +34,6 @@ def rasterize_zp(gds_file, pix_size, cell=None, layer=None, verbose=False):
         cells = lib.cells
     else:
         cells = [c for c in lib.cells if c.name == cell]
-
     fig, ax = plt.subplots()
 
     print('Populating the polygons')

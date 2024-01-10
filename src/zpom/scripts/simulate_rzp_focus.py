@@ -3,21 +3,26 @@ from zpom.optic_simulation import *
 import os
 import argparse
 import h5py
+# This fixes a bug when the Qt backed is installed badly. Needed because
+# matplotlib is used to do the rasterizing.
+# Using a non-interactive backend gets rid of the dependence on X forwarding
+import matplotlib
+matplotlib.use('Agg')
+
 
 def main():
 
     parser = argparse.ArgumentParser(
-        prog='simulate-sunflower-rzp-focus',
-        description='Simulates the monochromatic focal spot from a single zone plate in a sunflower array')
+        prog='simulate-rzp-focus',
+        description='Simulates the focus of a randomized zone plate design file')
 
-    parser.add_argument('mask_folder', type=str, help='The folder containing the base rzp design masks')
+    parser.add_argument('mask_file', type=str, help='The folder containing the base rzp design masks')
     parser.add_argument('wavelength', type=float, help='The wavelength of light to simulate, in nm')
     parser.add_argument('focal_distance', type=float, help='The focal distance to simulate at, in mm')
     parser.add_argument('step', type=float, help='The pixel step size to simulate, in nm')
     parser.add_argument('n_pix', type=int, help='The diameter of the simulated focal spot window, in pixels')
-    parser.add_argument('--zone_plate_index', '-n', type=int, default=None, help='The index of the zone plate to design within the full array. Default is all zone plates.')
     parser.add_argument('--tile_size', type=int, default=4096, help='The tile size for loading and processing the files, default is 4096')
-    parser.add_argument('--output', '-o', type=str, default=None, help='The folder name to be used for the output simulated focal spot.')
+    parser.add_argument('--output', '-o', type=str, default=None, help='The filename to be used for the output simulated focus.')
     parser.add_argument('--device', type=str, default='cpu', help='The device to perform the light propagation step on, default is cpu')
     args = parser.parse_args()
 
@@ -34,25 +39,24 @@ def main():
     print('Output FOV: %0.2f x %0.2f um.' % tuple(d * 1e6 for d in output_fov))
     print('Calculation device:', args.device, flush=True)
 
-    if args.zone_plate_index is None:
-        raise NotImplementedError()
-
     if args.output is None:
-        output = (args.mask_folder + '/focal_spots/'
-                  + ('ZP%03d.h5' % args.zone_plate_index))
-        if not os.path.exists(args.mask_folder + '/focal_spots'):
+        output_folder = ('.'.join(args.mask_file.split('.')[:-1])
+                         + '_focal_spots/')
+        output = output_folder + 'focaldist%0.3fum.h5' % (focal_distance * 1e6)
+        if not os.path.exists(output_folder):
             # It appears that in a HPC environment, if many jobs are launched at
             # the same time, sometimes os.path.exists(output) will return false
-            # when in reality the folder exists. So, we also do a try/except
+            # but the folder gets created before this job tries to create it.
+            # So, we also do a try/except
             try:
-                os.mkdir(args.mask_folder + '/focal_spots')
+                os.mkdir(output_folder)
             except:
                 pass            
 
     else:
         output=args.output
     
-    mask_file = args.mask_folder + ('/masks/ZP%03d.gds' % args.zone_plate_index)
+    mask_file = args.mask_file
 
     print('Rasterizing .gds file', flush=True)
     rasterized_zp, input_offset = rasterize_zp(mask_file, step, verbose=True)
@@ -64,7 +68,7 @@ def main():
         wavelength,
         step,
         output_shape,
-        tile_shape=[2048,2048],
+        tile_shape=[args.tile_size, args.tile_size],
         verbose=True,
         calculation_device=args.device)
     print('Focus simulation complete, saving', flush=True)
@@ -78,3 +82,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
