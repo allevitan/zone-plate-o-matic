@@ -90,14 +90,11 @@ def simulate_focus(rasterized_zp,
                    wavelength,
                    pix_size,
                    output_shape,
-                   offset=None,
                    tile_shape=None,
                    calculation_device=None,
                    verbose=False):
     
     output_offset = - (np.array(output_shape)-1)/2
-    if offset is not None:
-        offset += np.array(offset) / pix_size
     input_offset = input_offset / pix_size
     offset = input_offset - output_offset
     torch_zp = t.as_tensor(rasterized_zp).to(dtype=t.complex128)
@@ -107,6 +104,34 @@ def simulate_focus(rasterized_zp,
                                      output_shape=output_shape,
                                      calculation_device=calculation_device,
                                      tile_shape=tile_shape, verbose=verbose)
+    return focus.cpu()
+
+    
+def simulate_focus_t(rasterized_zp,
+                     input_offset,
+                     focal_distance,
+                     wavelength,
+                     pix_size,
+                     A,
+                     time,
+                     output_shape,
+                     t_0=None,
+                     tile_shape=None,
+                     calculation_device=None,
+                     verbose=False):
+    
+    output_offset = - (np.array(output_shape)-1)/2
+    input_offset = input_offset / pix_size
+    offset = input_offset - output_offset
+    torch_zp = t.as_tensor(rasterized_zp).to(dtype=t.complex128)
+    focus = propagation.FFT_DI_tiled_t(torch_zp, focal_distance,
+                                       wavelength, [pix_size]*2,
+                                       A, time,
+                                       offset=offset,
+                                       t_0=t_0,
+                                       output_shape=output_shape,
+                                       calculation_device=calculation_device,
+                                       tile_shape=tile_shape, verbose=verbose)
     return focus.cpu()
 
     

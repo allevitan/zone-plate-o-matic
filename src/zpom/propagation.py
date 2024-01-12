@@ -95,7 +95,7 @@ def create_G(U_0, z, wavelength, step, offset=[0,0]):
     return G
 
 
-def create_G_t(U_0, z, wavelength, step, A, t, offset=[0,0], t_0=None):
+def create_G_t(U_0, z, wavelength, step, A, time, offset=[0,0], t_0=None):
     """Creates a time-dependent G array for a specific propagation problem.
 
     The output is the array G, expressed in real space, as defined
@@ -132,7 +132,7 @@ def create_G_t(U_0, z, wavelength, step, A, t, offset=[0,0], t_0=None):
         The pitch of the discretized light field array, in meters.
     A : function
         A function which defines the time-dependent wavepacket envelope
-    t : float
+    time : float
         The time at which the wavefield should be evaluated
     offset : array
         Optional, the (i,j) vector in units of pixels which maps the corner
@@ -168,10 +168,10 @@ def create_G_t(U_0, z, wavelength, step, A, t, offset=[0,0], t_0=None):
     c = 299792458.0 # speed of light in m/s
     if t_0 is None:
         t_0 = z / c
-    times = (t + t_0) - R / c
+    times = (time + t_0) - R / c
     omega = 2 * np.pi * c / wavelength
-    time_dependence = t.exp((-1j * omega) * times) * A(times)
-    
+    time_dependence = A(times)
+
     # Probably overkill but maybe helpful for memory
     del X, Y
     gc.collect()
@@ -271,7 +271,7 @@ def FFT_DI(U_0, z, wavelength, step, offset=[0,0], verbose=False):
     return Q
 
 
-def FFT_DI_t(U_0, z, wavelength, step, A, t, offset=[0,0], t_0=None,
+def FFT_DI_t(U_0, z, wavelength, step, A, time, offset=[0,0], t_0=None,
              verbose=False):
     """Uses a time-dependent extension FFT-DI to propagate a light field
 
@@ -335,7 +335,7 @@ def FFT_DI_t(U_0, z, wavelength, step, A, t, offset=[0,0], t_0=None,
     # The magic of this method that allows for open boundary conditions is the
     # fact that we create G in real space, and then calculate it's FFT, instead
     # of using e.g. the angular spectrum propagator directly in Fourier space.
-    G = create_G_t(U_0, z, wavelength, step, A, offset=offset, t_0=t_0)
+    G = create_G_t(U_0, z, wavelength, step, A, time, offset=offset, t_0=t_0)
 
     if verbose:
         print('G created, performing FFT')
@@ -503,7 +503,7 @@ def FFT_DI_tiled(U_0, z, wavelength, step,
     return output
 
 
-def FFT_DI_tiled_t(U_0, z, wavelength, step, A, t,
+def FFT_DI_tiled_t(U_0, z, wavelength, step, A, time,
                    offset=[0,0],
                    t_0=None,
                    output_shape=None,
@@ -613,7 +613,7 @@ def FFT_DI_tiled_t(U_0, z, wavelength, step, A, t,
                        (in_j - out_j) * tile_shape[1] + offset[1]]
 
         # And we perform the actual calculation
-        out_tile = FFT_DI_t(in_tile, z, wavelength, step, A, t,
+        out_tile = FFT_DI_t(in_tile, z, wavelength, step, A, time,
                             offset=tile_offset, t_0=t_0)
 
         # Finally, we extract the output tile in a way which gets rid of any

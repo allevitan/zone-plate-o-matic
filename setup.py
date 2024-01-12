@@ -35,7 +35,9 @@ setuptools.setup(
             'realize-sunflower-design = zpom.scripts.realize_sunflower_design:main',
             'collate-sunflower-design = zpom.scripts.collate_sunflower_design:main',
             'simulate-rzp-focus = zpom.scripts.simulate_rzp_focus:main',
-            'simulate-sunflower-rzp-focus = zpom.scripts.simulate_sunflower_rzp_focus:main']
+            'simulate-sunflower-rzp-focus = zpom.scripts.simulate_sunflower_rzp_focus:main',
+            'simulate-rzp-focus-t = zpom.scripts.simulate_rzp_focus_t:main',
+        ]
         },
     classifiers=[
         "Programming Language :: Python :: 3",
