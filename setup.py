@@ -37,6 +37,7 @@ setuptools.setup(
             'simulate-rzp-focus = zpom.scripts.simulate_rzp_focus:main',
             'simulate-sunflower-rzp-focus = zpom.scripts.simulate_sunflower_rzp_focus:main',
             'simulate-rzp-focus-t = zpom.scripts.simulate_rzp_focus_t:main',
+            'simulate-sunflower-rzp-focus-t = zpom.scripts.simulate_sunflower_rzp_focus_t:main',
         ]
         },
     classifiers=[

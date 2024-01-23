@@ -24,9 +24,9 @@ def linterp_1d(y, xs, x0, dx, const=0):
     # we add it here, before the floor, so we don't need to worry
     # about how floor deals with negative numbers
     scaled_xs = ((xs - x0) / dx) + 1
-    scaled_xs = t.clamp(scaled_xs, min=0, max=len(xs) + 1)
+    scaled_xs = t.clamp(scaled_xs, min=0, max=len(y) + 1)
 
     idx = t.floor(scaled_xs).to(dtype=t.int64)
     alpha = scaled_xs - idx
 
-    return alpha * t.take(y, idx) + (1 - alpha) * t.take(y, idx + 1)
+    return (1-alpha) * t.take(padded_y, idx) + alpha * t.take(padded_y, idx + 1)

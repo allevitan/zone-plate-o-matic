@@ -4,6 +4,9 @@ import os
 import argparse
 import h5py
 
+import matplotlib
+matplotlib.use('Agg')
+
 def main():
 
     parser = argparse.ArgumentParser(
@@ -18,6 +21,8 @@ def main():
     parser.add_argument('--zone_plate_index', '-n', type=int, default=None, help='The index of the zone plate to design within the full array. Default is all zone plates.')
     parser.add_argument('--tile_size', type=int, default=4096, help='The tile size for loading and processing the files, default is 4096')
     parser.add_argument('--output', '-o', type=str, default=None, help='The folder name to be used for the output simulated focal spot.')
+    parser.add_argument('--cache-raster', action='store_true', help='If set, the rasterized optic will be saved')
+    parser.add_argument('--ignore-cache', action='store_true', help='If set, will force a re-rasterization of the optic, even if a cached version exists')
     parser.add_argument('--device', type=str, default='cpu', help='The device to perform the light propagation step on, default is cpu')
     args = parser.parse_args()
 
@@ -51,12 +56,38 @@ def main():
 
     else:
         output=args.output
-    
+
+        
     mask_file = args.mask_folder + ('/masks/ZP%03d.gds' % args.zone_plate_index)
 
-    print('Rasterizing .gds file', flush=True)
-    rasterized_zp, input_offset = rasterize_zp(mask_file, step, verbose=True)
-    print('Rasterized, simulating the focus', flush=True)
+    raster_file = ('.'.join(mask_file.split('.')[:-1])
+                   + ('_raster%0.3fnm.h5' % (step * 1e9)))
+
+    must_rasterize = True
+
+    if os.path.exists(raster_file) and not args.ignore_cache:
+        print('Loading rasterized optic from', raster_file)
+        try:
+            with h5py.File(raster_file, 'r') as f:
+                rasterized_zp = np.array(f['rasterized_zp'])
+                input_offset = np.array(f['input_offset'])
+            must_rasterize = False
+        except:
+            print('Cached optic file was malformed, rerasterizing')
+
+    if must_rasterize:
+        print('Rasterizing .gds file', flush=True)
+        rasterized_zp, input_offset = rasterize_zp(
+            mask_file, step, verbose=True)
+        print('Rasterized', flush=True)
+        if args.cache_raster:
+            print('Caching the rasterized optic', flush=True)
+            with h5py.File(raster_file, 'w') as f:
+                f.create_dataset('rasterized_zp', data=rasterized_zp)
+                f.create_dataset('input_offset', data=input_offset)
+                f.create_dataset('step', data=step)
+
+    print('Simulating the focus', flush=True)
     focus = simulate_focus(
         rasterized_zp,
         input_offset,

@@ -26,20 +26,20 @@ def main():
     with h5py.File(args.plan_file, 'r') as plan:
         U_0 = t.as_tensor(np.array(plan['design_focus']))
         dtype = U_0.dtype
-        f = np.array(plan['design_focal_distance'])[()]
-        dr = np.array(plan['outer_zone_width'])[()]
-        focus_diameter = np.array(plan['focus_diameter'])[()]
-        n_frames = np.array(plan['n_frames'])[()]
-        mini_zps_per_frame = np.array(plan['n_zps_per_frame'])[()]
-        mini_zp_spacing = np.array(plan['zp_spacing'])[()]
-        mini_zp_width = np.array(plan['zp_width'])[()]
-        inner_zone_index = np.array(plan['inner_zone_index'])[()]
-        wavelength = np.array(plan['design_wavelength'])[()]
-        step = np.array(plan['pix_size'])[()]
-        buttress_spacing = np.array(plan['buttress_spacing'])[()]
-        buttress_deviation = np.array(plan['buttress_deviation'])[()]
-        apodization_ratio = np.array(plan['apodization_ratio'])[()]
-        tiling_style = np.array(plan['tiling_style'])[()]
+        f = np.array(plan['design_focal_distance']).ravel()[0]
+        dr = np.array(plan['outer_zone_width']).ravel()[0]
+        focus_diameter = np.array(plan['focus_diameter']).ravel()[0]
+        n_frames = np.array(plan['n_frames']).ravel()[0]
+        mini_zps_per_frame = np.array(plan['n_zps_per_frame']).ravel()[0]
+        mini_zp_spacing = np.array(plan['zp_spacing']).ravel()[0]
+        mini_zp_width = np.array(plan['zp_width']).ravel()[0]
+        inner_zone_index = np.array(plan['inner_zone_index']).ravel()[0]
+        wavelength = np.array(plan['design_wavelength']).ravel()[0]
+        step = np.array(plan['pix_size']).ravel()[0]
+        buttress_spacing = np.array(plan['buttress_spacing']).ravel()[0]
+        buttress_deviation = np.array(plan['buttress_deviation']).ravel()[0]
+        apodization_ratio = np.array(plan['apodization_ratio']).ravel()[0]
+        tiling_style = np.array(plan['tiling_style']).ravel()[0]
 
 
     NZ = inner_zone_index + (n_frames-1) * mini_zp_spacing + mini_zp_width
@@ -67,7 +67,7 @@ def main():
     print('Focal Distance per Energy (A1): %0.3f um/eV' % (1e6*f * wavelength / hc))
     print('Focal Spot Diameter: %0.3f um' % (focus_diameter * 1e6))
     print('Optic Diameter: %0.3f um' % (optic_diameter*1e6))
-    print('Max Buttress Deviation: %0.1f%%' % (buttress_deviation))
+    print('Max Buttress Deviation: %0.1f%%' % (buttress_deviation * 100))
     print('Apodization Ratio:', apodization_ratio)
     print('Calculation Device:',  args.device)
     print('')

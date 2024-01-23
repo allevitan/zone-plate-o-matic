@@ -1,6 +1,5 @@
 #!/bin/bash
 #SBATCH -p day
-#SBATCH -A gpu
 #SBATCH --ntasks 1
 #SBATCH --cpus-per-task 1
 

@@ -386,25 +386,27 @@ def design_sunflower_array(plan_file, zone_plate_index,
     with h5py.File(plan_file, 'r') as plan:
         U_0 = t.as_tensor(np.array(plan['design_focus']))
         dtype = U_0.dtype
-        f = float(np.array(plan['design_focal_distance'])[()])
-        dr = float(np.array(plan['outer_zone_width'])[()])
-        focus_diameter = float(np.array(plan['focus_diameter'])[()])
-        wavelength = float(np.array(plan['design_wavelength'])[()])
-        step = float(np.array(plan['pix_size'])[()])
-        buttress_spacing = float(np.array(plan['buttress_spacing'])[()])
-        buttress_deviation = float(np.array(plan['buttress_deviation'])[()])
-        apodization_ratio = float(np.array(plan['apodization_ratio'])[()])
+        f = float(np.array(plan['design_focal_distance']).ravel()[0])
+        dr = float(np.array(plan['outer_zone_width']).ravel()[0])
+        focus_diameter = float(np.array(plan['focus_diameter']).ravel()[0])
+        wavelength = float(np.array(plan['design_wavelength']).ravel()[0])
+        step = float(np.array(plan['pix_size']).ravel()[0])
+        buttress_spacing = float(np.array(plan['buttress_spacing']).ravel()[0])
+        buttress_deviation = \
+            float(np.array(plan['buttress_deviation']).ravel()[0])
+        apodization_ratio = \
+            float(np.array(plan['apodization_ratio']).ravel()[0])
         
         tiling_style = plan['tiling_style'][()].decode()
 
         mini_zp = plan['ZP%03d/' % zone_plate_index]
-        x = float(np.array(mini_zp['x'])[()])
-        y = float(np.array(mini_zp['y'])[()])
-        r = float(np.array(mini_zp['radius'])[()])
+        x = float(np.array(mini_zp['x']).ravel()[0])
+        y = float(np.array(mini_zp['y']).ravel()[0])
+        r = float(np.array(mini_zp['radius']).ravel()[0])
         window = ((x - r, x + r), (y - r, y + r))
-        inner_r = float(np.array(mini_zp['inner_r'])[()])
-        outer_r = float(np.array(mini_zp['outer_r'])[()])
-        
+        inner_r = float(np.array(mini_zp['inner_r']).ravel()[0])
+        outer_r = float(np.array(mini_zp['outer_r']).ravel()[0])
+
     if not os.path.exists(output_file):
         # It appears that in a HPC environment, if many jobs are launched at
         # the same time, sometimes os.path.exists(output) will return false

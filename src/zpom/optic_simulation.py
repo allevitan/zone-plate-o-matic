@@ -54,6 +54,10 @@ def rasterize_zp(gds_file, pix_size, cell=None, layer=None, verbose=False):
     ax.autoscale(True, tight=True)  
     ax.axis('off')
     ylim, xlim = ax.get_ylim(), ax.get_xlim()
+
+    if ((xlim[1]-xlim[0]) >= 2**15) or ((ylim[1] - ylim[0]) >= 2**15):
+        raise ValueError('Matplotlib is being used to rasterize the .gds file. It has an issue with outputting figures with either dimension greater than 2**15 pixels. Your options are (1) increase the pixel size for the simulation, so that the rasterized optic is smaller than that, or (2) email Abe at abraham.levita@psi.ch to get him to finally fix this. If you are Abe, tough luck.')
+
     # The natural units of the gdsii file are um, so we follow that
     # convention here and plot in microns
     pix_size_um = pix_size*1e6
