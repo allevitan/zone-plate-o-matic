@@ -145,28 +145,30 @@ def main():
                             rounded_time,
                             step*1e9)))
             
-            print('Simulating the focus', flush=True)
+            print('Simulating the focus at time', time, flush=True)
             focus = simulate_focus_t(
                 rasterized_zp,
                 input_offset,
-                focal_distance,
+                distance,
                 wavelength,
                 step,
                 A_func,
                 time,
                 output_shape,
                 t_0=args.time_offset,
-                tile_shape=[2048,2048],
+                tile_shape=[args.tile_size, args.tile_size],
                 verbose=True,
                 calculation_device=args.device)
             print('Focus simulation complete, saving', flush=True)
 
-    with h5py.File(output, 'w') as f:
-        f.create_dataset('sim_focus', data=focus)
-        f.create_dataset('wavelength', data=[wavelength])
-        f.create_dataset('focal_distance', data=[focal_distance])
-        f.create_dataset('step', data=[step])
-    print('Saved')
+            with h5py.File(output, 'w') as f:
+                f.create_dataset('sim_focus', data=focus)
+                f.create_dataset('wavelength', data=[wavelength])
+                f.create_dataset('distance', data=[distance])
+                f.create_dataset('step', data=[step])
+                f.create_dataset('time', data=[time])
+                f.create_dataset('time_offset', data=[args.time_offset])
+            print('Saved')
 
 if __name__ == '__main__':
     main()

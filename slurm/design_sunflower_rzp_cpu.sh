@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -p day
+#SBATCH -p week
 #SBATCH --ntasks 1
 #SBATCH --cpus-per-task 6
 

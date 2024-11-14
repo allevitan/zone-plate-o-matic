@@ -24,6 +24,7 @@ def main():
     parser.add_argument('--mini_zp_width', '-mzw', type=int, default=None, help='The width of each mini-zp, in zones')
     parser.add_argument('--mini_zp_length_factor', '-mzl', type=float, default=1, help='The ratio of the zone plate length to a sensible default. Defaults to 1.')
     parser.add_argument('--mini_zps_per_frame', '-mpf', default=3, type=int, help='Number of mini-zps per frame')
+    parser.add_argument('--special_order', action='store_true', help='Whether to use the special order for 2 mini-zps per frame')
     parser.add_argument('--vary_width', '-vw', action='store_true', help='If set, allows the inner zone plates to be wider than the outer ones')
     parser.add_argument('--yes', '-y', action='store_true', help='Automatically confirms the parameters, good for HPC environments or batch computing.')
     parser.add_argument('--output', '-o', type=str, help='The output filename for the base raster design file. A sensible default is used if not specified')
@@ -101,7 +102,8 @@ def main():
                          equal_width=~args.vary_width,
                          tiling_style='alternating',
                          buttress_deviation=0.01*args.buttress_deviation,
-                         apodization_ratio=apodization_ratio)
+                         apodization_ratio=apodization_ratio,
+                         special_order=args.special_order)
             
 if __name__ == '__main__':
     main()

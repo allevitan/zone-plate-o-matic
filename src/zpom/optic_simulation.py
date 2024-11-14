@@ -15,7 +15,7 @@ from matplotlib import patches, transforms
 import io
 import PIL
 # May need to be updated if the ZP is too large
-PIL.Image.MAX_IMAGE_PIXELS = 1000000000 
+PIL.Image.MAX_IMAGE_PIXELS = 10000000000 
 from zpom import propagation
 from tqdm import tqdm
 

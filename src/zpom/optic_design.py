@@ -152,6 +152,7 @@ golden_angle = (np.pi * (3 - np.sqrt(5)))
 def place_sunflower_zps(dr, n_frames, wavelength,
                         inner_zone_index, mini_zp_spacing, mini_zp_width=None,
                         mini_zp_length_factor=1, mini_zps_per_frame=3,
+                        special_order=False,
                         equal_width=True, phi_0=0):
     """Defines the properties of the mini zone plates in a multi-frame RZP
 
@@ -182,6 +183,8 @@ def place_sunflower_zps(dr, n_frames, wavelength,
         The azimuthal angle of the first mini-zp, in radians. Default is 0.
     verbose : bool, optional
         Whether to print the zone plate parameters. Default is false.
+    special_order : bool, optional
+        If True, and mini_zps_per_frame=2, it swaps the 2nd and 3rd mini zp, 6th and 7th, and so on.
 
     Returns
     -------
@@ -206,6 +209,12 @@ def place_sunflower_zps(dr, n_frames, wavelength,
     # f =  dr**2 * 4 * NZ / wavelength ## This is the simplified calculation that's usually used
 
     frame_idx = np.repeat(np.arange(0,n_frames), mini_zps_per_frame)
+
+    if mini_zps_per_frame == 2 and special_order==True:
+        for idx in range(1, len(frame_idx), 4):
+            frame_idx[idx], frame_idx[idx+1] = frame_idx[idx+1], frame_idx[idx]
+
+    
     starting_zones = inner_zone_index + frame_idx * mini_zp_spacing
     ending_zones = starting_zones + mini_zp_width
     inner_rs = np.sqrt(starting_zones * f * wavelength + starting_zones**2 * wavelength**2 / 4)
@@ -268,6 +277,7 @@ def inspect_sunflower_placement(design, pix_size=1e-6):
         zp_mask += mask
     plt.imshow(zp_mask)
     plt.colorbar()
+    
 
 def plan_sunflower_array(
         dr,
@@ -286,6 +296,7 @@ def plan_sunflower_array(
         phi_0=0,
         buttress_spacing=None,
         buttress_deviation=0.15,
+        special_order=False,
         tiling_style='alternating',
         apodization_ratio=0):
     """Saves a sunflower zone plate array design plan to a file"""
@@ -303,7 +314,9 @@ def plan_sunflower_array(
         mini_zp_length_factor=mini_zp_length_factor,
         mini_zps_per_frame=mini_zps_per_frame,
         equal_width=equal_width,
-        phi_0=phi_0)
+        phi_0=phi_0,
+        special_order=special_order,
+    )
 
 
     # The real-valued dtype corresponding to the given complex-valued dtype.

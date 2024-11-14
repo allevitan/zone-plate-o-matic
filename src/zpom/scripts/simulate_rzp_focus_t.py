@@ -157,7 +157,7 @@ def main():
             with h5py.File(output, 'w') as f:
                 f.create_dataset('sim_focus', data=focus)
                 f.create_dataset('wavelength', data=[wavelength])
-                f.create_dataset('focal_distance', data=[focal_distance])
+                f.create_dataset('distance', data=[distance])
                 f.create_dataset('step', data=[step])
                 f.create_dataset('time', data=[time])
                 f.create_dataset('time_offset', data=[args.time_offset])

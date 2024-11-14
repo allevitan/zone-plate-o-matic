@@ -29,6 +29,7 @@ setuptools.setup(
    entry_points = {
         'console_scripts' : [
             'plan-sunflower-rzp = zpom.scripts.plan_sunflower_rzp:main',
+            'inspect-sunflower-rzp-plan = zpom.scripts.inspect_sunflower_rzp_plan:main',
             'design-rzp = zpom.scripts.design_rzp:main',
             'design-sunflower-rzp = zpom.scripts.design_sunflower_rzp:main',
             'realize-design = zpom.scripts.realize_design:main',

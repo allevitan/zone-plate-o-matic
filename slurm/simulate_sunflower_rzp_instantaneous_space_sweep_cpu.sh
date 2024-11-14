@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -p week
+#SBATCH -p day
 #SBATCH --ntasks 1
 #SBATCH --cpus-per-task 6
 
@@ -7,4 +7,5 @@ module load anaconda/2023-06-19
 source /opt/psi/TOMCAT/anaconda/2023-06-19/conda/etc/profile.d/conda.sh
 conda activate zpom
 
-realize-sunflower-design $1 $2 $3 -n $SLURM_ARRAY_TASK_ID --chunk_size 4096 -np $4
+
+simulate-sunflower-rzp-focus-t $1 $2 $3 $4 $5 $6 -n $SLURM_ARRAY_TASK_ID --tile_size 4096 --cache-raster --time $7 --z-step $8 --z-range $9

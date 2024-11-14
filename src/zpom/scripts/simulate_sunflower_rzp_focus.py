@@ -13,7 +13,7 @@ def main():
         prog='simulate-sunflower-rzp-focus',
         description='Simulates the monochromatic focal spot from a single zone plate in a sunflower array')
 
-    parser.add_argument('mask_folder', type=str, help='The folder containing the base rzp design masks')
+    parser.add_argument('mask_folder', type=str, help='The folder containing the base rzp design masks. It should contain a folder called masks.')
     parser.add_argument('wavelength', type=float, help='The wavelength of light to simulate, in nm')
     parser.add_argument('focal_distance', type=float, help='The focal distance to simulate at, in mm')
     parser.add_argument('step', type=float, help='The pixel step size to simulate, in nm')
@@ -26,6 +26,7 @@ def main():
     parser.add_argument('--device', type=str, default='cpu', help='The device to perform the light propagation step on, default is cpu')
     args = parser.parse_args()
 
+    args.mask_folder = args.mask_folder.rstrip('/')
     wavelength = args.wavelength * 1e-9 # nm
     focal_distance = args.focal_distance * 1e-3 # mm
     step = args.step * 1e-9 # nm 
@@ -57,7 +58,6 @@ def main():
     else:
         output=args.output
 
-        
     mask_file = args.mask_folder + ('/masks/ZP%03d.gds' % args.zone_plate_index)
 
     raster_file = ('.'.join(mask_file.split('.')[:-1])
@@ -77,6 +77,7 @@ def main():
 
     if must_rasterize:
         print('Rasterizing .gds file', flush=True)
+        print('File to use is', mask_file, flush=True)
         rasterized_zp, input_offset = rasterize_zp(
             mask_file, step, verbose=True)
         print('Rasterized', flush=True)
@@ -95,7 +96,7 @@ def main():
         wavelength,
         step,
         output_shape,
-        tile_shape=[2048,2048],
+        tile_shape=[args.tile_size, args.tile_size],
         verbose=True,
         calculation_device=args.device)
     print('Focus simulation complete, saving', flush=True)
