@@ -11,7 +11,7 @@ def main():
 
     parser = argparse.ArgumentParser(
         prog='realize_rzp_design',
-        description='Converts a base sunflowe RZP design directory into a vectorized gdsii file.')
+        description='Converts a base sunflower RZP design directory into a vectorized gdsii file.')
 
 
     parser.add_argument('base_folder', type=str, help='The base rzp design folder')
@@ -19,6 +19,7 @@ def main():
     parser.add_argument('buttress_width', type=float, help='The width of the buttresses, in nm. 0 will produce no buttresses')
     # TODO: zone plate index argument doesn't work
     parser.add_argument('--zone_plate_index', '-n', type=int, default=None, help='The index of the zone plate to design within the full array. Default is all zone plates.')
+    parser.add_argument('--rect', action='store_true', help='If True, returns a gds file with rectangles instead of polygons')
     parser.add_argument('--n_processes', '-np', type=int, default=1, help='The number of simultaneous processes to run, default=1')
     parser.add_argument('--chunk_size', type=int, default=4096, help='The chunk size for loading and processing the files, default is 4096')
     parser.add_argument('--output', '-o', type=str, help='The output folder nameto be used for the output gdsii and low-resolution mask files. There is a sensible default')
@@ -70,7 +71,11 @@ def main():
         buttress_width = args.buttress_width*1e-9
 
         print('Buttress width: %0.3f nm' % (buttress_width * 1e9))
-        print('Grating Level: %0.3f' % args.grating_level)
+        print('Grating level: %0.3f' % args.grating_level)
+        if args.rect:
+            print('Using rectangles')
+        else:
+            print('Not using rectangles')
         print('')
 
         gds_file = gds_folder + '.'.join(base_file.split('.')[:-1]) + '.gds'
@@ -81,7 +86,8 @@ def main():
                        grating_max=args.grating_level,
                        n_processes=args.n_processes,
                        chunk_size=args.chunk_size,
-                       verbose=True, view=False)
+                       verbose=True, view=False,
+                       use_rectangles=args.rect)
 
         
 

@@ -75,6 +75,7 @@ def main():
     print('Optic Diameter: %0.3f um' % (optic_diameter*1e6))
     print('Max Buttress Deviation: %0.1f%%' % (args.buttress_deviation))
     print('Apodization Ratio:', apodization_ratio)
+    print(f'Pixel Size in Optic Design: {step*1e9 : 0.3f} nm')
     print('Output File:', output_filename)
     print('', flush=True)
 

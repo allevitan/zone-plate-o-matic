@@ -18,6 +18,7 @@ def main():
     parser.add_argument('--n_processes', '-n', type=int, default=1, help='The number of simultaneous processes to run, default=1')
     parser.add_argument('--chunk_size', type=int, default=4096, help='The chunk size for loading and processing the files, default is 4096')
     parser.add_argument('--output', '-o', type=str, help='The output filename base (without the .gds or .h5 extension) to be used for the output gdsii and low-resolution mask file. There is a sensible default')
+    parser.add_argument('--rect', action='store_true', help='If True, returns a gds file with rectangles instead of polygons')    
     args = parser.parse_args()
 
     if args.output is None:
@@ -46,7 +47,8 @@ def main():
                    grating_max=args.grating_level,
                    n_processes=args.n_processes,
                    chunk_size=args.chunk_size,
-                   verbose=True, view=False)
+                   verbose=True, view=False,
+                   use_rectangles=args.rect)
 
 
 if __name__ == '__main__':

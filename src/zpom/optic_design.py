@@ -26,12 +26,14 @@ import numpy as np
 import itertools as it
 import h5py
 from zpom import propagation
-from multiprocessing import Pool
+import multiprocessing as mp
 from skimage.measure import find_contours
 import gdstk
 import tqdm
 import os
 from matplotlib import pyplot as plt
+import functools
+import itertools
 
 # TODO: In the future I could also add an "abberation" function or something
 # like that so that this code could be used to design regular zone plates
@@ -725,7 +727,8 @@ def design_grating_hologram(U_0,
 def realize_design(filename, gds_filename,
                    buttress_width=15e-9, grating_max=0.9,
                    chunk_size=2048, n_processes=6,
-                   verbose=False, overlap=512, view=False):
+                   verbose=False, overlap=512, view=False,
+                   use_rectangles=False):
     """Makes contours and the low resolution version"""
     with h5py.File(filename,'r') as f:
         step = float(f['step'][()])
@@ -758,9 +761,9 @@ def realize_design(filename, gds_filename,
             return mask, pad_i, pad_j, start_i, start_j, chunk_size
 
         if verbose:
-            print('Working on making contours')
+            print('Working on making contours. Note that progress bar is for inputs, so the last\nchunks may still be processing once it reaches 100%.')
         chunks = (get_padded_chunk(i,j) for i,j in it.product(i_list, j_list))
-        with Pool(processes=n_processes) as pool:
+        with mp.get_context('spawn').Pool(processes=n_processes) as pool:
             if verbose:
                 # We use tqdm on the inputs because starmap waits until
                 # the end to return anything
@@ -769,18 +772,25 @@ def realize_design(filename, gds_filename,
                                         miniters=1)
                 contour_lists = \
                     pool.starmap(process_contours, tqdm_chunks, chunksize=1)
-                    
+                
             else:
                 contour_lists = pool.starmap(process_contours, chunks,
                                              chunksize=1)
-
         contours = [c for contour_list in contour_lists for c in contour_list]
         
         if verbose:
             print('Now cleaning the contours')
-        final_contours = clean_contours_multiprocess(
-            contours, n_processes=n_processes, show_progress=verbose)
-        
+        if use_rectangles:
+            print('Output contours will be defined as rectangles')
+            final_contours = clean_contours_multiprocess(
+                contours, n_processes=n_processes, show_progress=verbose,
+                max_points=8, epsilon=0.8, use_rectangles=use_rectangles)
+        else:
+            print('Output contours will be defined as arbitrary polygons')
+            final_contours = clean_contours_multiprocess(
+                contours, n_processes=n_processes, show_progress=verbose,
+                use_rectangles=use_rectangles)
+            
         conversion_factor = step * 1e6 # um since this is the default gdsii unit
         converted_contours = [conversion_factor * c + offset * 1e6
                               for c in final_contours]
@@ -795,9 +805,15 @@ def realize_design(filename, gds_filename,
         cell = lib.new_cell('RZP')
         
         # Create the geometry (a single rectangle) and add it to the cell.
-        
-        for contour in converted_contours:
-            cell.add(gdstk.Polygon(contour))
+        if use_rectangles:
+            for contour in converted_contours:
+                p1, p2, center, angle = quad_to_rect(contour)
+                rect = gdstk.rectangle(list(p1), list(p2))
+                rect = rect.rotate(angle, center=center)
+                cell.add(rect)
+        else:
+            for contour in converted_contours:
+                cell.add(gdstk.Polygon(contour))
             
         # Save the library in a file called 'first.gds'.
         lib.write_gds(gds_filename)
@@ -827,7 +843,6 @@ def process_contours(chunk, pad_i, pad_j, start_i, start_j, chunk_size):
         return check_i and check_j
     
     offset = np.array([start_i, start_j])
-
     return [offset + c for c in contours if check_contour(c)]
 
 def max_offset(points):
@@ -846,48 +861,134 @@ def max_offset(points):
     return max_idx, dists[max_idx]
 
 
-def rdp(points, epsilon=1):
-    to_search = [(0, len(points)-1)]
+def rdp(points, epsilon=1, max_points=None):
+    # Note that the whole max_points thing isn't really part of the classic
+    # RDP algorithm. So, I don't love how this one handles it, but this
+    # implementation is so much faster than the rdp_old implementation
+    # that I think it's better to go with this one
     indices = [0, len(points)-1]
-    while to_search:
-        start, end = to_search.pop()
-        max_idx, dist = max_offset(points[start:end+1])
-        max_idx += start
-        if dist > epsilon:
-            indices.append(max_idx)
-            if (max_idx-start) > 1:
-                to_search.append((start, max_idx))
-            if (end - max_idx) > 1:
-                to_search.append((max_idx, end))
+    while max_points is None or len(indices) < max_points:
+        max_dist = epsilon
 
-    return points[sorted(indices)]
+        indices_to_add = []
+        for idx in range(len(indices)-1):
+            start = indices[idx]
+            end = indices[idx + 1]
+            max_idx, dist = max_offset(points[start:end+1])
+            if dist > epsilon:
+                indices_to_add.append((dist, max_idx + start))
 
+        if len(indices_to_add) == 0:
+            break
+        elif max_points is None:
+            indices.extend(
+                [ index for dist, index in sorted(indices_to_add) ]
+            )
+            indices = sorted(indices)
+        else:
+            # we will add up to n_to_add
+            n_to_add = max_points - len(indices)
+             # sorts lexicographically on tuple
+            indices.extend(
+                [ index for dist, index in sorted(indices_to_add)[:n_to_add] ]
+            )
+            indices = sorted(indices)
+            if len(indices) >= max_points:
+                break
+            
+    return points[indices]
     
 
-def clean_contours(contours, epsilon=1.5, verbose=False):
+def rdp_old(points, epsilon=1, max_points=None):
+#    print('starting')
+    indices = [0, len(points)-1]
+    while max_points is None or len(indices) < max_points:
+#        print('Hihihihihihihihihi')
+#        print(len(indices))
+        max_dist = epsilon
 
-    n_contours = len(contours)
-    contours = (rdp(c, epsilon=epsilon) for c in contours)
-    # Must be rectangles
-    contours_out = []
-    for i, c in enumerate(contours):
-        if verbose and i % 100 == 0:
-            print('Working on contour',i,'of',n_contours, flush=True)
+        for idx in range(len(indices)-1):
+            start = indices[idx]
+            end = indices[idx + 1]
+            max_idx, dist = max_offset(points[start:end+1])
+            #print(dist, max_dist, epsilon)
+            max_idx += start
+            if dist > max_dist:
+                max_dist = dist
+                max_dist_idx = max_idx
+    
+        if max_dist > epsilon:
+            indices.append(max_dist_idx)
+            indices = sorted(indices)
+        else:
+            break
+#    print('returning')
+    return points[indices]
 
-        if len(c)>=5 and np.allclose(c[0],c[-1]):
-            contours_out.append(c)
+def quad_area(points):
+    A1 = 0.5 * np.abs(np.cross(points[0]-points[1],points[2]-points[1]))
+    A2 = 0.5 * np.abs(np.cross(points[0]-points[3],points[2]-points[3]))
+    return A1 + A2
 
-    return contours_out
+def find_max_area_quad(points):
+    """Returns the quadrilateral made of points in points which has the
+    maximum area"""
+    combos = list(itertools.combinations(points, 4))
+    areas = [quad_area(pts) for pts in combos]
+    quad = np.array(combos[np.argmax(areas)])
+    return np.concatenate([quad, quad[:1]], axis=0)
+
+def quad_to_rect(points):
+    edges = (np.array(points[:-1]) + np.array(points[1:])) / 2
+    
+    center = np.mean(np.stack(edges, axis=0), axis=0)
+    v1 = edges[2] - edges[0]
+    v2 = edges[1] - edges[3]
+    if np.linalg.norm(v1) < np.linalg.norm(v2):
+        v1, v2 = v2, v1
+        
+    w = np.linalg.norm(v1)
+    v1_hat = np.nan_to_num(v1 / w)
+    angle = np.arctan2(v1_hat[1], v1_hat[0])
+    h = np.linalg.norm(np.cross(v2, v1_hat))
+    p1 = center - np.array([w/2, h/2])
+    p2 = center + np.array([w/2, h/2])
+    return (p1, p2, center, angle)
+
+
+def single_clean_step(contour,epsilon=1,max_points=None,use_rectangles=False):
+    points = rdp(contour, epsilon=epsilon, max_points=max_points)
+
+    # If we want to use rectangles in the end, the first step of that
+    # is to extract the quadrilateral with the largest area from among the
+    # points on the contour
+    if use_rectangles and len(points) >= 6:
+        points = find_max_area_quad(points[:-1])
+
+    return points
+
+
 
 def clean_contours_multiprocess(contours, n_processes=4, show_progress=False,
-                                miniters=1, remove_small=True):
+                                miniters=1, remove_small=True, epsilon=1,
+                                max_points=None, use_rectangles=False):
+    print('max points', max_points)
+    print('epsilon', epsilon)
+    print('use rectangles?', use_rectangles)
     
-    with Pool(processes=n_processes) as pool:
+    single_step = functools.partial(
+        single_clean_step,
+        epsilon=epsilon,
+        max_points=max_points,
+        use_rectangles=use_rectangles)
+    
+    with mp.get_context('spawn').Pool(processes=n_processes) as pool:
         if show_progress:
-            contours = list(tqdm.tqdm(pool.imap(rdp, contours, chunksize=100),
+            contours = list(tqdm.tqdm(pool.imap(single_step,
+                                                contours, chunksize=100),
                                       total=len(contours), miniters=miniters))
         else:
-            contours = list(pool.imap(rdp, contours, chunksize=100))
+            contours = list(pool.imap(single_step, contours, chunksize=100))
 
     if remove_small:
         contours = [c for c in contours if len(c) >=5]

@@ -17,6 +17,8 @@ parser.add_argument('--gpu', action='store_true', help='Whether to use the GPUs 
 parser.add_argument('--n_processes', '-np', type=int, default=6, help='The number of processes to allocated to the realization stage, default of 6.')
 parser.add_argument('--design-time','-dt', type=str, default=None, help='Time limit per design step. Default is default for the day queue on cpu or default for the gpu-week queue on gpu.')
 parser.add_argument('--realize-time','-rt', type=str, default=None, help='Time limit per design step. Default is default for the day queue.')
+parser.add_argument('--skip-design', action='store_true', help='If set, skips the design step and goes straight to realize')
+parser.add_argument('--rect',  action='store_true', help='If True, returns a gds file with rectangles instead of polygons')
 
 args = parser.parse_args()
 
@@ -38,26 +40,39 @@ design_job = [
     args.plan_file
 ]
 
-slurm_output = subprocess.check_output(design_job).decode()
+if not args.skip_design:
+    slurm_output = subprocess.check_output(design_job).decode()
 
-job_id = int(slurm_output.split(' ')[-1])
+    job_id = int(slurm_output.split(' ')[-1])
 
-print('\nDesign steps have Job ID', job_id,'\n')
-print('Scheduling the realization steps')
-
+    print('\nDesign steps have Job ID', job_id,'\n')
+    print('Scheduling the realization steps')
+else:
+    print('Skipping design step, starting directly with realization')
+    
 design_folder = args.plan_file[:-8:] + '_intermediate_design'
 
+if not args.skip_design:
+    realize_dependency = '--dependency=afterok:'+str(job_id)
+else:
+    realize_dependency = '--dependency='
+
+    
 realize_job = [
     'sbatch',
     jobarray,
     '--cpus-per-task=' + str(args.n_processes),
-    '--dependency=afterok:'+str(job_id),
+    realize_dependency,
     'realize_sunflower_design.sh',
     design_folder,
     str(args.grating_level),
     str(args.buttress_width),
-    str(args.n_processes),    
+    str(args.n_processes),
 ]
+
+if args.rect:
+    realize_job = realize_job + ['--rect']
+    
 
 slurm_output = subprocess.check_output(realize_job).decode()
 job_id = int(slurm_output.split(' ')[-1])
@@ -74,7 +89,8 @@ collate_job = [
     'collate_sunflower_design.sh',
     realization_folder,
 ]
-
+    
+    
 slurm_output = subprocess.check_output(collate_job).decode()
 job_id = int(slurm_output.split(' ')[-1])
 
