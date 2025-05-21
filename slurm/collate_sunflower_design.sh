@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH -p week
 #SBATCH --ntasks 1
-#SBATCH --cpus-per-task 1
+#SBATCH --cpus-per-task 12
 
 module load anaconda/2023-06-19
 source /opt/psi/TOMCAT/anaconda/2023-06-19/conda/etc/profile.d/conda.sh

@@ -147,14 +147,95 @@ def design_rzp(dr,
         f.create_dataset('apodization_ratio', data=[apodization_ratio])
         f.create_dataset('beamstop_ratio', data=[bs_ratio])
 
+def design_custom_focus_rzp(
+        U_0,
+        dr,
+        NZ,
+        wavelength,
+        step,
+        output_filename,
+        bs_ratio=0.5,
+        dtype=t.complex128,
+        tile_size=None,
+        device='cpu',
+        buttress_spacing=None,
+        buttress_deviation=0.15,
+        tiling_style='alternating',
+        apodization_ratio=0,
+        verbose=False,
+):
+    
+    if buttress_spacing is None:
+        buttress_spacing = 4 * dr
+
+    NS = U_0.shape[0] * step / dr # Approximate
+    apodization_width = apodization_ratio * 8 * NZ * dr / NS
+    
+    # Calculate the focal distance & radius of the optic
+    f = 4 * NZ * dr**2 / wavelength
+    optic_r = 2 * NZ * dr
+    window = ((-optic_r,optic_r), (-optic_r, optic_r))
+
+    def window_function(X,Y, Angle, R):
+        # TODO: This function needs to also include the apodization
+        window = t.logical_and(R > bs_ratio * optic_r, R < optic_r)
+
+        if apodization_ratio!=0:
+            window = window.to(dtype=R.dtype)
+            
+            aw = apodization_width # just a shorthand
+            bs_r = bs_ratio * optic_r
+
+            outer_edge = t.logical_and(R > (optic_r - aw), R < optic_r)
+            inner_edge = t.logical_and(R < (bs_r + aw), R > bs_r)
+            
+            # This is a Tukey window
+            window[outer_edge] *= \
+                (1 - t.cos(np.pi * (R[outer_edge] - optic_r) / aw) ) / 2
+            window[inner_edge] *= \
+                (1 - t.cos(np.pi * (R[inner_edge] - bs_r) / aw) ) / 2
+
+        return window
+
+   # This populates the design file
+    design_grating_hologram(U_0,
+                            f,
+                            window,
+                            window_function,
+                            wavelength,
+                            step,
+                            output_filename,
+                            dtype=dtype,
+                            device=device,
+                            tile_size=tile_size,
+                            buttress_spacing=buttress_spacing,
+                            buttress_deviation=buttress_deviation,
+                            outer_r=optic_r,
+                            tiling_style=tiling_style,
+                            verbose=verbose)
+
+    # As a final convenience, we add a few extra bits of metadata to the design
+    # file that the general grating hologram function didn't know about
+    with h5py.File(output_filename, 'r+') as f:
+        apodization_ratio = apodization_ratio
+        f.create_dataset('dr', data=[dr])
+        f['dr'].attrs['units'] = 'm'
+        f.create_dataset('NZ', data=[NZ])
+        f.create_dataset('buttress_spacing', data=[buttress_spacing])
+        f.create_dataset('buttress_deviation', data=[buttress_deviation])
+        f.create_dataset('apodization_ratio', data=[apodization_ratio])
+        f.create_dataset('beamstop_ratio', data=[bs_ratio])
+
 
 # An important constant for the sunflower array    
 golden_angle = (np.pi * (3 - np.sqrt(5)))
+golden_ratio = 0.618033988749
 
 def place_sunflower_zps(dr, n_frames, wavelength,
                         inner_zone_index, mini_zp_spacing, mini_zp_width=None,
                         mini_zp_length_factor=1, mini_zps_per_frame=3,
                         special_order=False,
+                        use_multi_spiral=True,
                         equal_width=True, phi_0=0):
     """Defines the properties of the mini zone plates in a multi-frame RZP
 
@@ -187,6 +268,8 @@ def place_sunflower_zps(dr, n_frames, wavelength,
         Whether to print the zone plate parameters. Default is false.
     special_order : bool, optional
         If True, and mini_zps_per_frame=2, it swaps the 2nd and 3rd mini zp, 6th and 7th, and so on.
+    use_multi_spiral : bool, optional
+        If True, it uses multiple spirals to place the ZPs such that the set of n_zps_per_frame are equally spaced
 
     Returns
     -------
@@ -200,6 +283,11 @@ def place_sunflower_zps(dr, n_frames, wavelength,
 
     ns = np.arange(n_frames * mini_zps_per_frame)
     phis = phi_0 + ns * golden_angle
+
+    if use_multi_spiral:
+        for n in range(mini_zps_per_frame):
+            phis[n::mini_zps_per_frame] = ((2 * np.pi / mini_zps_per_frame)
+                    * (n  + golden_ratio * np.arange(n_frames)))
 
     NZ = inner_zone_index + (n_frames-1) * mini_zp_spacing + mini_zp_width
 
@@ -299,6 +387,7 @@ def plan_sunflower_array(
         buttress_spacing=None,
         buttress_deviation=0.15,
         special_order=False,
+        use_multi_spiral=True,
         tiling_style='alternating',
         apodization_ratio=0):
     """Saves a sunflower zone plate array design plan to a file"""
@@ -318,6 +407,7 @@ def plan_sunflower_array(
         equal_width=equal_width,
         phi_0=phi_0,
         special_order=special_order,
+        use_multi_spiral=use_multi_spiral,
     )
 
 
