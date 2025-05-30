@@ -42,22 +42,17 @@ def main():
         args.mini_zp_width = args.mini_zp_spacing
     NZ = NZ = args.inner_zone + (
         (args.n_frames-1) * args.mini_zp_spacing + args.mini_zp_width )
-    f = 4 * NZ * dr**2 / wavelength # focal length
 
+    f = calc_f(NZ, dr, wavelength)
+    optic_diameter = calc_diameter(NZ, dr, wavelength=wavelength)
+    
     hc = 1.23984e-6 # in m*eV
-
-    print((f * wavelength / hc))
 
     if args.output is None:
         output_filename = 'Sunflower_RZP_dr=%0.2fnm_NF=%d_focdiam=%0.2fum_plan.h5' % (dr*1e9, args.n_frames, focus_diameter*1e6)
     else:
         output_filename = args.output
 
-
-    
-    optic_diameter = 4 * NZ * dr
-
-    
     print('\nDesigning a zone plate to the following specifications:')
     print('-------------------------------------------------------')
     print('Outer Zone Width (dr): %0.3f nm' % (dr*1e9))
@@ -104,7 +99,9 @@ def main():
                          tiling_style='alternating',
                          buttress_deviation=0.01*args.buttress_deviation,
                          apodization_ratio=apodization_ratio,
-                         special_order=args.special_order)
+                         special_order=args.special_order,
+                         use_multi_spiral=True,
+                         )
             
 if __name__ == '__main__':
     main()

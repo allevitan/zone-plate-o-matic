@@ -68,6 +68,7 @@ realize_job = [
     str(args.grating_level),
     str(args.buttress_width),
     str(args.n_processes),
+    '--rect',
 ]
 
 if args.rect:

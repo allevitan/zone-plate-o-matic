@@ -37,8 +37,7 @@ def main():
     tile_size = args.tile_size
     bs_ratio = args.beamstop_ratio
 
-    f = 4 * NZ * dr**2 / wavelength # focal length
-
+    f = calc_f(NZ, dr, wavelength)
     hc = 1.23984e-6 # in m*eV
 
     if args.output is None:
@@ -48,7 +47,7 @@ def main():
 
     sample_r = NS * dr / 2 # Illumination spot radius
     input_shape = [int((2 * sample_r) // step) + 1]*2
-    optic_r = 2 * NZ * dr # overall ZP radius
+    optic_r = calc_diameter(NZ, dr, wavelength=wavelength) / 2
     output_shape = [int((2 * optic_r) // step) + 1]*2
     estimated_output_size = 3 * output_shape[0] * output_shape[1] * 1e-9
 

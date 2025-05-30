@@ -24,7 +24,14 @@ def main():
             for key in list(f[zp_label]):
                 new_zp[key] = np.array(f[zp_label][key])
             zps.append(new_zp)
-    
+
+    print('True inner zone:', int(zps[0]['start_zone']))
+    print('True outer zone:', int(zps[-1]['end_zone']))
+    print('True inner diameter:', 1e6 * 2 * zps[0]['inner_r'][0], 'um')
+    print('True outer diameter:', 1e6 * 2 * zps[-1]['outer_r'][0], 'um')
+    print('Inner frame center zone:', int(zps[0]['center_zone']))
+    print('Outer frame center zone:', int(zps[-1]['center_zone']))
+        
     inspect_sunflower_placement(zps, pix_size=1e-6)
     plt.set_cmap('gray_r')
     plt.xlabel('x (um)')

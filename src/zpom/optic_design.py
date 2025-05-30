@@ -28,6 +28,7 @@ import h5py
 from zpom import propagation
 import multiprocessing as mp
 from skimage.measure import find_contours
+from scipy import optimize
 import gdstk
 import tqdm
 import os
@@ -39,6 +40,93 @@ import itertools
 # like that so that this code could be used to design regular zone plates
 # with a fixed aberration function in Fourier space, like what they use at
 # SLS.
+
+
+def calc_f(NZ, dr, wavelength):
+    """Calculates the focal distance including wavelength-dependent corrections
+
+    This function calculates the focal distance of a zone plate with a specified
+    number of zones, design wavelength, and outer zone width.
+
+    The function includes a wavelength-dependent correction - in other words, it
+    assumes that the zone plate has been designed to work properly at high
+    numerical apertures at the specified wavelength, and calculates the focal
+    distance at that design wavelength.
+    
+    Parameters
+    ----------
+    NZ : int
+        The number of zones in the zone plate (with the starting zone defined to be on the optical axis)
+    dr : float
+        The outer zone width of the zone plate, in meters
+    wavelength : float
+        The design wavelength, in meters
+
+    Returns
+    -------
+    f : float
+        The focal distance of the optic at the design wavelength, in meters
+    """
+    # This is the simplified calculation that's usually used
+    # f =  dr**2 * 4 * NZ / wavelength
+
+    # And this is a corrected one
+    a = wavelength**2    
+    b = NZ * wavelength**3 - 4 * dr**2 * NZ * wavelength
+    c = NZ**2 * wavelength**2 * ( wavelength**2 / 4 - dr**2 )
+    f = (-b + np.sqrt(b**2 - 4 * a * c)) / (2 * a)
+
+    return f
+
+
+def calc_diameter(NZ, dr, wavelength=None):
+    """Calculates the diameter of an optic including a wavelength-dependent correction
+
+    If no wavelength is given, it simply returns 4 * NZ * dr, the limit for an
+    infinitessimally small wavelength.
+
+    If a wavelength is given, it calculates the radius of an optic which has
+    been corrected to work properly at high numerical apertures at the defined
+    wavelength.
+    
+    Parameters
+    ----------
+    NZ : int
+        The number of zones in the zone plate (with the starting zone defined to be on the optical axis)
+    dr : float
+        The outer zone width of the zone plate, in meters
+    wavelength : float
+        The design wavelength, in meters. If not specified, the result is calculated for the limit as wavelength -> 0
+
+    Returns
+    -------
+    diameter : float
+        The diameter of the optic at the specified zone number
+    """
+
+    if wavelength is None:
+        return 4 * NZ * dr
+    else:
+        f = calc_f(NZ, dr, wavelength)
+        r = np.sqrt(NZ*f*wavelength + NZ**2 * wavelength**2 / 4)
+        return 2 * r
+
+def optimize_off_axis_z_fixed_r(f, center_zone, wavelength, target_r):
+
+    def calc_r(zone):
+        return np.sqrt(zone*f*wavelength + zone**2 * wavelength**2 / 4)
+
+    def calc_off_axis_r(num_zones):
+        inner_rs = calc_r(center_zone - num_zones/2)
+        outer_rs = calc_r(center_zone + num_zones/2)
+        return outer_rs - inner_rs
+
+    def optimization_target(num_zones):
+        return 1e9 * (calc_off_axis_r(num_zones) - target_r)**2
+
+    res = optimize.minimize(optimization_target, 1)
+    return res['x']
+        
 
 def design_rzp(dr,
                NZ,
@@ -90,8 +178,8 @@ def design_rzp(dr,
     apodization_width = apodization_ratio * 8 * NZ * dr / NS
     
     # Calculate the focal distance & radius of the optic
-    f = 4 * NZ * dr**2 / wavelength
-    optic_r = 2 * NZ * dr
+    f = calc_f(NZ, dr, wavelength)
+    optic_r = calc_diameter(NZ, dr, wavelength=wavelength) / 2
     window = ((-optic_r,optic_r), (-optic_r, optic_r))
 
     def window_function(X,Y, Angle, R):
@@ -172,12 +260,11 @@ def design_custom_focus_rzp(
     apodization_width = apodization_ratio * 8 * NZ * dr / NS
     
     # Calculate the focal distance & radius of the optic
-    f = 4 * NZ * dr**2 / wavelength
-    optic_r = 2 * NZ * dr
+    f = calc_f(NZ, dr, wavelength)
+    optic_r = calc_diameter(NZ, dr, wavelength=wavelength) / 2
     window = ((-optic_r,optic_r), (-optic_r, optic_r))
 
     def window_function(X,Y, Angle, R):
-        # TODO: This function needs to also include the apodization
         window = t.logical_and(R > bs_ratio * optic_r, R < optic_r)
 
         if apodization_ratio!=0:
@@ -291,12 +378,7 @@ def place_sunflower_zps(dr, n_frames, wavelength,
 
     NZ = inner_zone_index + (n_frames-1) * mini_zp_spacing + mini_zp_width
 
-    # Calculation of the focal distance, including the n**2 * lambda**2 term in the zone plate equation
-    a = wavelength**2
-    b = 2 * NZ * wavelength**3 - 4 * dr**2 * NZ * wavelength
-    c = NZ**2 * wavelength**2 * ( wavelength**2 - 4 * dr**2 / 2 )
-    f = (-b + np.sqrt(b**2 - 4 * a * c)) / (2 * a)
-    # f =  dr**2 * 4 * NZ / wavelength ## This is the simplified calculation that's usually used
+    f = calc_f(NZ, dr, wavelength)
 
     frame_idx = np.repeat(np.arange(0,n_frames), mini_zps_per_frame)
 
@@ -307,20 +389,43 @@ def place_sunflower_zps(dr, n_frames, wavelength,
     
     starting_zones = inner_zone_index + frame_idx * mini_zp_spacing
     ending_zones = starting_zones + mini_zp_width
+    center_zones = starting_zones + mini_zp_width // 2
+     
     inner_rs = np.sqrt(starting_zones * f * wavelength + starting_zones**2 * wavelength**2 / 4)
     outer_rs = np.sqrt(ending_zones * f * wavelength + ending_zones**2 * wavelength**2 / 4)
+    center_rs = np.sqrt(center_zones * f * wavelength + center_zones**2 * wavelength**2 / 4)
 
     if equal_width:
+        # In this case, we rerun all the calculations to ensure all the ZPs
+        # have the same width defined by the outer frame's natural width
         width = outer_rs[-1] - inner_rs[-1]
-        outer_rs = inner_rs + width
+        off_axis_zp_nzones = [
+            optimize_off_axis_z_fixed_r(f, cz, wavelength, width)
+            for cz in center_zones
+        ]
+        # Just clean up the number of zones so it's an even integer
+        # This still has higher precision than we'll need
+        off_axis_zp_nzones = np.array([
+            int(np.round(num_zones/2))*2
+            for num_zones in off_axis_zp_nzones
+        ])
+        outer_rs = np.sqrt(center_zones * f * wavelength + center_zones**2 * wavelength**2 / 4)
 
-    # This is (roughly) the area of the optic occupied by region associated with each frame
+        starting_zones = center_zones - off_axis_zp_nzones // 2
+        ending_zones = center_zones + off_axis_zp_nzones // 2
+        
+        inner_rs = np.sqrt(starting_zones * f * wavelength + starting_zones**2 * wavelength**2 / 4)
+        outer_rs = np.sqrt(ending_zones * f * wavelength + ending_zones**2 * wavelength**2 / 4)
+        center_rs = np.sqrt(center_zones * f * wavelength + center_zones**2 * wavelength**2 / 4)
+
+    # This is (roughly) the area of the optic occupied by a region associated
+    # with each frame
     frame_area = np.pi * (mini_zp_spacing * f * wavelength)
     # And this is a rough measure of a good mini-zp radius
     base_radius = np.sqrt(frame_area / mini_zps_per_frame) / 2
 
-    xs = (inner_rs + outer_rs)/2 * np.cos(phis)
-    ys = (inner_rs + outer_rs)/2 * np.sin(phis)
+    xs = (center_rs) * np.cos(phis)
+    ys = (center_rs) * np.sin(phis)
 
     design = [
         { 'phi': phi,
@@ -328,6 +433,7 @@ def place_sunflower_zps(dr, n_frames, wavelength,
           'y': y,
           'start_zone': sz,
           'end_zone': ez,
+          'center_zone' : cz,
           'f': f,
           'frame_id': frame_id,
           'dr': dr,
@@ -335,13 +441,14 @@ def place_sunflower_zps(dr, n_frames, wavelength,
           'inner_r': inner_r,
           'outer_r': outer_r,
           'radius': base_radius * mini_zp_length_factor,
-        } for (phi, x, y, sz, ez, frame_id, inner_r, outer_r)
+        } for (phi, x, y, sz, ez, cz, frame_id, inner_r, outer_r)
         in zip(
             phis,
             xs,
             ys,
             starting_zones,
             ending_zones,
+            center_zones,
             frame_idx,
             inner_rs,
             outer_rs
@@ -365,6 +472,7 @@ def inspect_sunflower_placement(design, pix_size=1e-6):
         mask[Rs < mini_zp['inner_r']] = 0
         mask[Rs > mini_zp['outer_r']] = 0
         zp_mask += mask
+
     plt.imshow(zp_mask)
     plt.colorbar()
     
@@ -438,10 +546,10 @@ def plan_sunflower_array(
     # n**2 * lambda**2 term in the zone plate equation
     NZ = inner_zone_index + (n_frames-1) * mini_zp_spacing + mini_zp_width
 
-    a = wavelength**2
-    b = 2 * NZ * wavelength**3 - 4 * dr**2 * NZ * wavelength
-    c = NZ**2 * wavelength**2 * ( wavelength**2 - 4 * dr**2 / 2 )
-    f = (-b + np.sqrt(b**2 - 4 * a * c)) / (2 * a)\
+    a = wavelength**2    
+    b = NZ * wavelength**3 - 4 * dr**2 * NZ * wavelength
+    c = NZ**2 * wavelength**2 * ( wavelength**2 / 4 - dr**2 )
+    f = (-b + np.sqrt(b**2 - 4 * a * c)) / (2 * a)
     
     hc = 1.23984e-6 # in m*eV
     
@@ -645,8 +753,8 @@ def design_grating_hologram(U_0,
         A1 = f * wavelength / hc # focal distance per photon energy
         output_store.create_dataset('A1', data=[A1])
         output_store['A1'].attrs['units'] = 'm/eV'
-        output_store.create_dataset('wavelength', data=[wavelength])
-        output_store['wavelength'].attrs['units'] = 'm'
+        output_store.create_dataset('design_wavelength', data=[wavelength])
+        output_store['design_wavelength'].attrs['units'] = 'm'
         output_store.create_dataset('step', data=[step[0]])
         output_store['step'].attrs['units'] = 'm'
 
