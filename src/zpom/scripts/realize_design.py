@@ -48,7 +48,8 @@ def main():
                    n_processes=args.n_processes,
                    chunk_size=args.chunk_size,
                    verbose=True, view=False,
-                   use_rectangles=args.rect)
+                   use_rectangles=args.rect,
+                   min_dimension=dr/3)
 
 
 if __name__ == '__main__':
