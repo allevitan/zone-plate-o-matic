@@ -91,7 +91,8 @@ def main():
                tiling_style='alternating',
                device=args.device,
                buttress_deviation=0.01*args.buttress_deviation,
-               apodization_ratio=apodization_ratio)
+               apodization_ratio=apodization_ratio,
+               bs_ratio=bs_ratio)
 
 if __name__ == '__main__':
     main()
