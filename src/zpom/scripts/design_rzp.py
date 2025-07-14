@@ -18,11 +18,12 @@ def main():
     parser.add_argument('wavelength', type=float, help='The wavelength of light to design for, in nanometers')
     parser.add_argument('step', type=float, help='The step size of the output array in real space, in nanometers. Typically, 1/10 of the outer zone width is the minimum for good performance')
     parser.add_argument('--design_order', '-do', type=int, default=1, help='The order at which the optic is designed to be used. 1 is the default.')
-    parser.add_argument('--apodization_ratio', '-ar', type=float, default=1, help='The apodization ratio used to apodize the output ZP. 2 is the default, and is good for most scenarios')
+    parser.add_argument('--apodization_ratio', '-ar', type=float, default=1, help='The apodization ratio used to apodize the output ZP. 1 is the default, and is good for most scenarios')
     parser.add_argument('--device', type=str, default='cpu', help='The device to perform the light propagation step on, default is cpu')
     parser.add_argument('--tile_size', '-ts', type=int, default=4096, help='The size of the tiles to use for the various computation steps, default=4096. Larger tiles are more efficient in many cases, provided there is sufficient memory available.')
     parser.add_argument('--buttress_deviation', '-bd', type=float, default=15, help='The maximum deviation allowed (in %%) from the true buttress spacing before a new zone is created.')
     parser.add_argument('--beamstop_ratio', '-bsr', type=float, default=0.5, help='The beamstop diameter, as a fraction of the overall diameter. 0.5 is the default')
+    parser.add_argument('--duty_cycle', '-dc', type=float, default=0.5, help='The ratio of the zone width to the optic pitch')
     parser.add_argument('--yes', '-y', action='store_true', help='Automatically confirms the parameters, good for HPC environments or batch computing.')
     parser.add_argument('--output', '-o', type=str, help='The output filename for the base raster design file. A sensible default is used if not specified')
 
@@ -70,6 +71,7 @@ def main():
     print('Optic Diameter: %0.3f um' % (2*optic_r*1e6))
     print('Beamstop Diameter: %0.3f um' % (bs_ratio * 2*optic_r*1e6))
     print('Max Buttress Deviation: %0.1f%%' % (args.buttress_deviation))
+    print('Duty Cycle: %.1f%%' % (args.duty_cycle * 100))
     print('Apodization Ratio:', apodization_ratio)
     print('Optic Raster Image Pixel Size: %0.2f nm' % step)
     print('Optic Design Array Shape: [ %d x %d ]' % tuple(output_shape))
@@ -97,6 +99,7 @@ def main():
                device=args.device,
                buttress_deviation=0.01*args.buttress_deviation,
                apodization_ratio=apodization_ratio,
+               duty_cycle=args.duty_cycle,
                bs_ratio=bs_ratio)
 
 if __name__ == '__main__':

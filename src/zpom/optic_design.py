@@ -159,6 +159,7 @@ def design_rzp(dr,
                buttress_spacing=None,
                buttress_deviation=0.15,
                tiling_style='alternating',
+               duty_cycle=0.5, # The ratio of the zone width to the pitch
                apodization_ratio=0,
                verbose=False,):
     
@@ -237,6 +238,7 @@ def design_rzp(dr,
                             buttress_deviation=buttress_deviation,
                             outer_r=optic_r,
                             tiling_style=tiling_style,
+                            duty_cycle=duty_cycle,
                             verbose=verbose)
 
     # As a final convenience, we add a few extra bits of metadata to the design
@@ -269,6 +271,7 @@ def design_custom_focus_rzp(
         buttress_spacing=None,
         buttress_deviation=0.15,
         tiling_style='alternating',
+        duty_cycle=0.5, # The ratio of the zone width to the pitch
         apodization_ratio=0,
         verbose=False,
 ):
@@ -321,6 +324,7 @@ def design_custom_focus_rzp(
                             buttress_deviation=buttress_deviation,
                             outer_r=optic_r,
                             tiling_style=tiling_style,
+                            duty_cycle=duty_cycle,
                             verbose=verbose)
 
     # As a final convenience, we add a few extra bits of metadata to the design
@@ -738,6 +742,7 @@ def design_grating_hologram(U_0,
                             buttress_deviation=0.15, # max deviation allowed from the defined buttress spacing
                             outer_r=None, # Definition of the outer radius where the buttress spacing is correct, default is the edge of the window.
                             tiling_style='alternating',
+                            duty_cycle=0.5, # The ratio of the zone width to the pitch
                             compression='lzf',
                             verbose=False):
 
@@ -929,7 +934,12 @@ def design_grating_hologram(U_0,
             numpy_grating[window_fn_output==0] = -128
             adjusted_out_tile_angle = \
                 ((-out_tile_angle + np.pi) + (zone_steps*2)) / design_order - np.pi
-            numpy_grating[(adjusted_out_tile_angle > 0)] = -128
+
+            assert 0 <= duty_cycle
+            assert 1 >= duty_cycle
+
+            zone_cutoff = np.pi - (duty_cycle * 2 *np.pi)
+            numpy_grating[(adjusted_out_tile_angle < zone_cutoff)] = -128
             
             result = t.abs(window_fn_output * out_tile).to(dtype=t.bfloat16)
             max_abs = max(max_abs, float(t.max(result)))
@@ -959,9 +969,10 @@ def realize_design(filename, gds_filename,
                    buttress_width=15e-9, grating_max=0.9,
                    chunk_size=2048, n_processes=6,
                    verbose=False, overlap=512, view=False,
-                   min_dimension=None,
+                   min_dimension=None, grow=0,
                    use_rectangles=False):
     """Makes contours and the low resolution version"""
+    
     with h5py.File(filename,'r') as f:
         step = float(f['step'][()])
         buttress_spacing = float(f['buttress_spacing'][()])
@@ -1017,6 +1028,7 @@ def realize_design(filename, gds_filename,
             final_contours = clean_contours_multiprocess(
                 contours, n_processes=n_processes, show_progress=verbose,
                 max_points=8, epsilon=0.8, use_rectangles=use_rectangles,
+                grow=(grow/step),
                 min_dimension=(min_dimension / step))
         else:
             print('Output contours will be defined as arbitrary polygons')
@@ -1183,7 +1195,7 @@ def polygon_area(points):
 # Shrinks the rectangle by an equal amount along all sides until
 # it's area matches that of the original contour
 #
-def shrink_rect(rect_points, original_contour):
+def shrink_rect(rect_points, original_contour, grow=0):
     original_area = polygon_area(original_contour)
     rect_area = polygon_area(rect_points)
     ax1 = rect_points[1] - rect_points[0]
@@ -1200,6 +1212,7 @@ def shrink_rect(rect_points, original_contour):
     c = rect_area - original_area
     shrink_amount = (-b - np.sqrt(b**2 - 4 * a * c)) / (2 * a)
 
+    shrink_amount = shrink_amount - grow
     
     # I'm sure a smarter person or AI model than me could do this more elegantly
     output_points = np.copy(np.array(rect_points))
@@ -1221,11 +1234,12 @@ def calc_min_dimension(rect_points):
     return np.minimum(l1, l2)
 
 
-def single_clean_step(contour,epsilon=1,max_points=None,use_rectangles=False):
+def single_clean_step(contour,epsilon=1,max_points=None,
+                      use_rectangles=False, grow=0):
     if use_rectangles:
         if len(contour) >=4:
             rect_points = minimum_bounding_rectangle(contour)
-            rect_points = shrink_rect(rect_points, contour[:-1])
+            rect_points = shrink_rect(rect_points, contour[:-1], grow=grow)
             #rect_area = polygon_area(rect_points)
             #original_area = polygon_area(contour[:-1])
             #rect_points = scale_polygon(
@@ -1243,16 +1257,15 @@ def single_clean_step(contour,epsilon=1,max_points=None,use_rectangles=False):
 def clean_contours_multiprocess(contours, n_processes=4, show_progress=False,
                                 miniters=1, remove_small=True, epsilon=1,
                                 max_points=None, use_rectangles=False,
+                                grow=0,
                                 min_dimension=None):
-    print('max points', max_points)
-    print('epsilon', epsilon)
-    print('use rectangles?', use_rectangles)
     
     single_step = functools.partial(
         single_clean_step,
         epsilon=epsilon,
         max_points=max_points,
-        use_rectangles=use_rectangles)
+        use_rectangles=use_rectangles,
+        grow=grow)
 
     
     

@@ -18,7 +18,8 @@ def main():
     parser.add_argument('--n_processes', '-n', type=int, default=1, help='The number of simultaneous processes to run, default=1')
     parser.add_argument('--chunk_size', type=int, default=4096, help='The chunk size for loading and processing the files, default is 4096')
     parser.add_argument('--output', '-o', type=str, help='The output filename base (without the .gds or .h5 extension) to be used for the output gdsii and low-resolution mask file. There is a sensible default')
-    parser.add_argument('--rect', action='store_true', help='If True, returns a gds file with rectangles instead of polygons')    
+    parser.add_argument('--rect', action='store_true', help='If True, returns a gds file with rectangles instead of polygons')
+    parser.add_argument('--grow', type=float, default=0, help='When the "--rect" option is used, this argument will grow (or shrink, for negative values) the size of each defined zone by the specified amount in nm.')
     args = parser.parse_args()
 
     if args.output is None:
@@ -34,10 +35,13 @@ def main():
         dr = float(f['dr'][()])
 
     buttress_width = args.buttress_width*1e-9
+    grow = args.grow * 1e-9
 
     print('Outer zone width %0.3f nm' % (1e9 * dr))    
     print('Buttress width: %0.3f nm' % (buttress_width * 1e9))
     print('Grating Level: %0.3f' % args.grating_level)
+    print('Using rectangles?', args.rect)
+    print('Grow rectangles by %0.3f nm' % (grow * 1e9))
     print('')
     print('Starting Calculation')
 
@@ -49,6 +53,7 @@ def main():
                    chunk_size=args.chunk_size,
                    verbose=True, view=False,
                    use_rectangles=args.rect,
+                   grow=grow,
                    min_dimension=dr/3)
 
 
