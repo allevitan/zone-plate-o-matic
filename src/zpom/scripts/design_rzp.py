@@ -17,7 +17,8 @@ def main():
     parser.add_argument('NS', type=float, help='The number of speckles across the focal spot NS (focal spot diameter = NS * OZW)') 
     parser.add_argument('wavelength', type=float, help='The wavelength of light to design for, in nanometers')
     parser.add_argument('step', type=float, help='The step size of the output array in real space, in nanometers. Typically, 1/10 of the outer zone width is the minimum for good performance')
-    parser.add_argument('--apodization_ratio', '-ar', type=float, default=2, help='The apodization ratio used to apodize the output ZP. 2 is the default, and is good for most scenarios')
+    parser.add_argument('--design_order', '-do', type=int, default=1, help='The order at which the optic is designed to be used. 1 is the default.')
+    parser.add_argument('--apodization_ratio', '-ar', type=float, default=1, help='The apodization ratio used to apodize the output ZP. 2 is the default, and is good for most scenarios')
     parser.add_argument('--device', type=str, default='cpu', help='The device to perform the light propagation step on, default is cpu')
     parser.add_argument('--tile_size', '-ts', type=int, default=4096, help='The size of the tiles to use for the various computation steps, default=4096. Larger tiles are more efficient in many cases, provided there is sufficient memory available.')
     parser.add_argument('--buttress_deviation', '-bd', type=float, default=15, help='The maximum deviation allowed (in %%) from the true buttress spacing before a new zone is created.')
@@ -32,12 +33,13 @@ def main():
     NZ = args.NZ
     NS = args.NS
     wavelength = args.wavelength * 1e-9
+    design_order = args.design_order
     step = args.step * 1e-9
     apodization_ratio = args.apodization_ratio
     tile_size = args.tile_size
     bs_ratio = args.beamstop_ratio
 
-    f = calc_f(NZ, dr, wavelength)
+    f = calc_f(NZ, dr, wavelength, design_order=design_order)
     hc = 1.23984e-6 # in m*eV
 
     if args.output is None:
@@ -45,9 +47,9 @@ def main():
     else:
         output_filename = args.output
 
-    sample_r = NS * dr / 2 # Illumination spot radius
+    sample_r = NS * dr  / (2 * design_order) # Illumination spot radius
     input_shape = [int((2 * sample_r) // step) + 1]*2
-    optic_r = calc_diameter(NZ, dr, wavelength=wavelength) / 2
+    optic_r = calc_diameter(NZ, dr, wavelength=wavelength, design_order=design_order) / 2
     output_shape = [int((2 * optic_r) // step) + 1]*2
     estimated_output_size = 3 * output_shape[0] * output_shape[1] * 1e-9
 
@@ -57,6 +59,7 @@ def main():
     print('Buttress Spacing: %0.3f' % (buttress_spacing*1e9))
     print('Number of Zones:', NZ)
     print('Number of Speckles:', NS)
+    print('Design Diffraction Order:', design_order)
     print('Design Wavelength: %0.3f nm' % (wavelength*1e9))
     print('Design Energy: %0.3f eV' % (hc / wavelength))
     print('Focal Distance at Design Wavelength: %0.3f mm' % (f* 1e3))
@@ -68,6 +71,7 @@ def main():
     print('Beamstop Diameter: %0.3f um' % (bs_ratio * 2*optic_r*1e6))
     print('Max Buttress Deviation: %0.1f%%' % (args.buttress_deviation))
     print('Apodization Ratio:', apodization_ratio)
+    print('Optic Raster Image Pixel Size: %0.2f nm' % step)
     print('Optic Design Array Shape: [ %d x %d ]' % tuple(output_shape))
     print('Focal Spot Design Array Shape: [ %d x %d ]' % tuple(input_shape))
     print('Tile Size for Calculation: [ %d x %d ]' % (tile_size, tile_size))
@@ -86,6 +90,7 @@ def main():
     print('Starting Calculation')
 
     design_rzp(dr, NZ, NS, wavelength, step, output_filename,
+               design_order=design_order,
                tile_size=tile_size, verbose=True,
                buttress_spacing=buttress_spacing,
                tiling_style='alternating',

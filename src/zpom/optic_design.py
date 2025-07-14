@@ -42,11 +42,14 @@ import itertools
 # SLS.
 
 
-def calc_f(NZ, dr, wavelength):
+def calc_f(NZ, dr, wavelength, design_order=1):
     """Calculates the focal distance including wavelength-dependent corrections
 
     This function calculates the focal distance of a zone plate with a specified
     number of zones, design wavelength, and outer zone width.
+
+    If the zone plate is designed to be used at a higher diffraction order,
+    e.g. the third order, then the calculation is adjusted for that case.
 
     The function includes a wavelength-dependent correction - in other words, it
     assumes that the zone plate has been designed to work properly at high
@@ -61,25 +64,32 @@ def calc_f(NZ, dr, wavelength):
         The outer zone width of the zone plate, in meters
     wavelength : float
         The design wavelength, in meters
+    design_order : int
+        Default 1, the diffraction order which the optic is designed for
 
     Returns
     -------
     f : float
         The focal distance of the optic at the design wavelength, in meters
     """
-    # This is the simplified calculation that's usually used
-    # f =  dr**2 * 4 * NZ / wavelength
-
-    # And this is a corrected one
+    # We adjust these parameters to now refer to the equivalent optic designed
+    # for use at the first order
+    NZ = design_order * NZ
+    dr = dr / design_order
+    
+    # And calculate the high-NA-corrected focal distance.
     a = wavelength**2    
     b = NZ * wavelength**3 - 4 * dr**2 * NZ * wavelength
     c = NZ**2 * wavelength**2 * ( wavelength**2 / 4 - dr**2 )
     f = (-b + np.sqrt(b**2 - 4 * a * c)) / (2 * a)
 
+    # This is the simplified calculation that's usually used
+    # f =  dr**2 * 4 * NZ / wavelength
+
     return f
 
 
-def calc_diameter(NZ, dr, wavelength=None):
+def calc_diameter(NZ, dr, wavelength=None, design_order=1):
     """Calculates the diameter of an optic including a wavelength-dependent correction
 
     If no wavelength is given, it simply returns 4 * NZ * dr, the limit for an
@@ -97,6 +107,9 @@ def calc_diameter(NZ, dr, wavelength=None):
         The outer zone width of the zone plate, in meters
     wavelength : float
         The design wavelength, in meters. If not specified, the result is calculated for the limit as wavelength -> 0
+    design_order : int
+        Default 1, the diffraction order which the optic is designed for
+
 
     Returns
     -------
@@ -107,10 +120,14 @@ def calc_diameter(NZ, dr, wavelength=None):
     if wavelength is None:
         return 4 * NZ * dr
     else:
-        f = calc_f(NZ, dr, wavelength)
+        f = calc_f(NZ, dr, wavelength, design_order=design_order)
+        # We correct NZ to now refer to the number of zones in the equivalent
+        # zone plate designed for use at the first diffraction order
+        NZ = design_order * NZ
         r = np.sqrt(NZ*f*wavelength + NZ**2 * wavelength**2 / 4)
         return 2 * r
 
+    
 def optimize_off_axis_z_fixed_r(f, center_zone, wavelength, target_r):
 
     def calc_r(zone):
@@ -134,6 +151,7 @@ def design_rzp(dr,
                wavelength,
                step,
                output_filename,
+               design_order=1,
                bs_ratio=0.5,
                dtype=t.complex128,
                tile_size=None,
@@ -145,16 +163,15 @@ def design_rzp(dr,
                verbose=False,):
     
     if buttress_spacing is None:
-        buttress_spacing = 4 * dr
-
+        buttress_spacing = 5 * dr
     
     # The real-valued dtype corresponding to the given complex-valued dtype.
     real_dtype = t.real(t.ones(1,dtype=dtype)).dtype
 
     # We create the speckle texture for the target focal spot, at a resolution
     # which matches the final ozw
-    sample_r = NS * dr / 2 
-    base_input_shape = [int((2 * sample_r) // dr) + 1]*2
+    sample_r = NS * dr / (2 * design_order) 
+    base_input_shape = [int((2 * sample_r) // (dr / design_order)) + 1]*2
     U_0 = t.exp(2j*np.pi*t.rand(*base_input_shape,
                                 dtype=real_dtype))
 
@@ -178,8 +195,9 @@ def design_rzp(dr,
     apodization_width = apodization_ratio * 8 * NZ * dr / NS
     
     # Calculate the focal distance & radius of the optic
-    f = calc_f(NZ, dr, wavelength)
-    optic_r = calc_diameter(NZ, dr, wavelength=wavelength) / 2
+    f = calc_f(NZ, dr, wavelength, design_order=design_order)
+    optic_r = calc_diameter(NZ, dr, wavelength=wavelength,
+                            design_order=design_order) / 2
     window = ((-optic_r,optic_r), (-optic_r, optic_r))
 
     def window_function(X,Y, Angle, R):
@@ -211,6 +229,7 @@ def design_rzp(dr,
                             wavelength,
                             step,
                             output_filename,
+                            design_order=design_order,
                             dtype=dtype,
                             device=device,
                             tile_size=tile_size,
@@ -242,6 +261,7 @@ def design_custom_focus_rzp(
         wavelength,
         step,
         output_filename,
+        design_order=1,
         bs_ratio=0.5,
         dtype=t.complex128,
         tile_size=None,
@@ -254,14 +274,15 @@ def design_custom_focus_rzp(
 ):
     
     if buttress_spacing is None:
-        buttress_spacing = 4 * dr
+        buttress_spacing = 5 * dr
 
-    NS = U_0.shape[0] * step / dr # Approximate
+    NS = U_0.shape[0] * step / (dr / design_order) # Approximate
     apodization_width = apodization_ratio * 8 * NZ * dr / NS
     
     # Calculate the focal distance & radius of the optic
-    f = calc_f(NZ, dr, wavelength)
-    optic_r = calc_diameter(NZ, dr, wavelength=wavelength) / 2
+    f = calc_f(NZ, dr, wavelength, design_order=design_order)
+    optic_r = calc_diameter(NZ, dr, wavelength=wavelength,
+                            design_order=design_order) / 2
     window = ((-optic_r,optic_r), (-optic_r, optic_r))
 
     def window_function(X,Y, Angle, R):
@@ -292,6 +313,7 @@ def design_custom_focus_rzp(
                             wavelength,
                             step,
                             output_filename,
+                            design_order=design_order,
                             dtype=dtype,
                             device=device,
                             tile_size=tile_size,
@@ -708,6 +730,7 @@ def design_grating_hologram(U_0,
                             wavelength,
                             step,
                             output_filename,
+                            design_order=1,
                             dtype=t.complex128,
                             device='cpu',
                             tile_size=None, 
@@ -757,6 +780,8 @@ def design_grating_hologram(U_0,
         output_store['design_wavelength'].attrs['units'] = 'm'
         output_store.create_dataset('step', data=[step[0]])
         output_store['step'].attrs['units'] = 'm'
+        output_store.create_dataset('design_order', data=[design_order])
+
 
 
         chunk_shape = np.minimum(tile_shape, output_shape)
@@ -861,11 +886,17 @@ def design_grating_hologram(U_0,
             perfect_zp_phase = (2*np.pi/wavelength) * (
                 Rs2 / (np.sqrt(f**2 + Rs**2) + f))
 
-            # This creates an "effective zone phase" which is constant within
-            # each zone, and jumps sharply at the zone transition. This is
-            # useful for constructing a globally consistent pattern of
-            # buttresses out of only locally available information.
-            zone_phase = 0.5 * perfect_zp_phase + 0.5 * t.angle(out_tile)
+            perfect_zp_phase = perfect_zp_phase
+
+            out_tile_angle = t.angle(out_tile)
+            zone_phase = (perfect_zp_phase + out_tile_angle) / 2
+
+            # Now we correct this zone phase for the design diffraction order
+            # by adding an integer offset to the zone plate phase for every
+            # diffraction_orderth zone. This does nothing in the case where
+            # diffraction_order = 1.
+            zone_steps = np.floor(np.mod(zone_phase / np.pi, design_order)) * np.pi
+            zone_phase = (zone_phase - zone_steps) / design_order            
             
             # Another use for it is constructing a quantity which is always
             # very close to the radius, but only jumps at zone transitions.
@@ -896,7 +927,9 @@ def design_grating_hologram(U_0,
             numpy_grating = (grating*127).to(dtype=t.int8, device='cpu')
             
             numpy_grating[window_fn_output==0] = -128
-            numpy_grating[(t.angle(out_tile) > 0)] = -128
+            adjusted_out_tile_angle = \
+                ((-out_tile_angle + np.pi) + (zone_steps*2)) / design_order - np.pi
+            numpy_grating[(adjusted_out_tile_angle > 0)] = -128
             
             result = t.abs(window_fn_output * out_tile).to(dtype=t.bfloat16)
             max_abs = max(max_abs, float(t.max(result)))
