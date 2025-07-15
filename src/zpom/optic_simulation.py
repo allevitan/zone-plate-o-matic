@@ -13,6 +13,7 @@ import torch as t
 from matplotlib import pyplot as plt
 from matplotlib import patches, transforms
 import io
+from scipy.ndimage import binary_erosion, binary_dilation
 import PIL
 # May need to be updated if the ZP is too large
 PIL.Image.MAX_IMAGE_PIXELS = 10000000000 
@@ -86,6 +87,49 @@ def rasterize_zp(gds_file, pix_size, cell=None, layer=None, verbose=False):
             # The alpha layer contains the info we need
             offset = np.array([-ylim[1], xlim[0]]) * 1e-6
             return (np.array(im)[:,:,3], offset)
+
+
+def make_dilation_element(radius):
+    I, J = np.mgrid[:2*int(radius)+1,:2*int(radius)+1]
+    I = I - int(radius)
+    J = J - int(radius)
+    R = np.sqrt(I**2 + J**2)
+    return R <= radius
+
+def simulate_fab_process(
+        rasterized_zp,
+        erosion_radius=0,
+        dilation_radii=[],
+        dilation_materials=[],
+        zone_material=0,
+        background_material=1,
+):
+    # First erode the rasterized ZP design by the specified amount
+
+    rasterized_zp = np.logical_not(np.isclose(rasterized_zp,0)).astype(np.int8)
+    if erosion_radius != 0:
+        previous_design = binary_erosion(
+            rasterized_zp,
+            make_dilation_element(erosion_radius)
+        )
+    else:
+        previous_design = rasterized_zp
+
+    final_design = (zone_material * previous_design).astype(np.complex128)
+    # Then do a series of dilations, in each case tracking the difference
+    # and finally setting the
+    for dilation_radius, dilation_material in \
+            zip(dilation_radii, dilation_materials):
+        dilated_design = binary_dilation(
+            previous_design,
+            make_dilation_element(dilation_radius)
+        )
+        final_design += (dilated_design - previous_design) * dilation_material
+        previous_design = dilated_design
+
+    final_design += (1-dilated_design) * background_material
+
+    return final_design
 
 
 def simulate_focus(rasterized_zp,

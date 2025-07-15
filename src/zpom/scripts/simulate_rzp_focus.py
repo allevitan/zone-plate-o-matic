@@ -26,6 +26,7 @@ def main():
     parser.add_argument('--device', type=str, default='cpu', help='The device to perform the light propagation step on, default is cpu')
     parser.add_argument('--cache-raster', action='store_true', help='If set, the rasterized optic will be saved')
     parser.add_argument('--ignore-cache', action='store_true', help='If set, will force a re-rasterization of the optic, even if a cached version exists')
+    parser.add_argument('--zone-double-width', type=float, default=None, help='If set, will roughly simulate a zone-doubled optic with the specified thickness of material, in nanometers, deposited')
     args = parser.parse_args()
 
     wavelength = args.wavelength * 1e-9 # nm
@@ -85,6 +86,16 @@ def main():
                 f.create_dataset('rasterized_zp', data=rasterized_zp)
                 f.create_dataset('input_offset', data=input_offset)
                 f.create_dataset('step', data=step)
+
+    if args.zone_double_width is not None:
+        zdw = 1e-9 * args.zone_double_width
+        rasterized_zp = simulate_fab_process(
+            rasterized_zp,
+            zone_material=0,
+            dilation_radii=[zdw / step],
+            dilation_materials=[1],
+            background_material=0
+        )
         
     print('Simulating the focus', flush=True)
     focus = simulate_focus(
