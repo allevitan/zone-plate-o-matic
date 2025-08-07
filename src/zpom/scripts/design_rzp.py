@@ -23,6 +23,7 @@ def main():
     parser.add_argument('--tile_size', '-ts', type=int, default=4096, help='The size of the tiles to use for the various computation steps, default=4096. Larger tiles are more efficient in many cases, provided there is sufficient memory available.')
     parser.add_argument('--buttress_deviation', '-bd', type=float, default=15, help='The maximum deviation allowed (in %%) from the true buttress spacing before a new zone is created.')
     parser.add_argument('--beamstop_ratio', '-bsr', type=float, default=0.5, help='The beamstop diameter, as a fraction of the overall diameter. 0.5 is the default')
+    parser.add_argument('--tiling_style', '-t', type=str, default='alternating', help='The method to use for buttress placement. "Alternating" is the default - this is brick-style. "Simple" is radial spokes.')
     parser.add_argument('--duty_cycle', '-dc', type=float, default=0.5, help='The ratio of the zone width to the optic pitch')
     parser.add_argument('--yes', '-y', action='store_true', help='Automatically confirms the parameters, good for HPC environments or batch computing.')
     parser.add_argument('--output', '-o', type=str, help='The output filename for the base raster design file. A sensible default is used if not specified')
@@ -71,6 +72,7 @@ def main():
     print('Optic Diameter: %0.3f um' % (2*optic_r*1e6))
     print('Beamstop Diameter: %0.3f um' % (bs_ratio * 2*optic_r*1e6))
     print('Max Buttress Deviation: %0.1f%%' % (args.buttress_deviation))
+    print('Buttress Tiling Style:', args.tiling_style)
     print('Duty Cycle: %.1f%%' % (args.duty_cycle * 100))
     print('Apodization Ratio:', apodization_ratio)
     print('Optic Raster Image Pixel Size: %0.2f nm' % step)
@@ -95,7 +97,7 @@ def main():
                design_order=design_order,
                tile_size=tile_size, verbose=True,
                buttress_spacing=buttress_spacing,
-               tiling_style='alternating',
+               tiling_style=args.tiling_style,
                device=args.device,
                buttress_deviation=0.01*args.buttress_deviation,
                apodization_ratio=apodization_ratio,

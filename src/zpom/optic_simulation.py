@@ -103,10 +103,15 @@ def simulate_fab_process(
         dilation_materials=[],
         zone_material=0,
         background_material=1,
+        invert=False,
 ):
     # First erode the rasterized ZP design by the specified amount
 
-    rasterized_zp = np.logical_not(np.isclose(rasterized_zp,0)).astype(np.int8)
+    rasterized_zp = \
+        (rasterized_zp > (0.5 * np.max(rasterized_zp))).astype(np.int8)
+    if invert:
+        rasterized_zp = 1 - rasterized_zp
+    
     if erosion_radius != 0:
         previous_design = binary_erosion(
             rasterized_zp,
@@ -128,7 +133,7 @@ def simulate_fab_process(
         previous_design = dilated_design
 
     final_design += (1-dilated_design) * background_material
-
+    
     return final_design
 
 

@@ -63,6 +63,8 @@ def main():
 
     raster_file = ('.'.join(args.mask_file.split('.')[:-1])
                    + ('_raster%0.3fnm.h5' % (step * 1e9)))
+    raster_fabsim_file = ('.'.join(args.mask_file.split('.')[:-1])
+                              + ('_raster_fabsim_%0.3fnm.h5' % (step * 1e9)))
 
     must_rasterize = True
     if os.path.exists(raster_file) and not args.ignore_cache:
@@ -88,14 +90,23 @@ def main():
                 f.create_dataset('step', data=step)
 
     if args.zone_double_width is not None:
+        print('Simulating a fab process with zone double width')
         zdw = 1e-9 * args.zone_double_width
         rasterized_zp = simulate_fab_process(
             rasterized_zp,
             zone_material=0,
             dilation_radii=[zdw / step],
             dilation_materials=[1],
-            background_material=0
+            background_material=0,
+            invert=True, #assuming the buttresses are part of the fab structure
         )
+        if args.cache_raster:
+            print('Caching the fab simulation optic', flush=True)
+            with h5py.File(raster_fabsim_file, 'w') as f:
+                f.create_dataset('rasterized_zp', data=rasterized_zp)
+                f.create_dataset('input_offset', data=input_offset)
+                f.create_dataset('step', data=step)
+
         
     print('Simulating the focus', flush=True)
     focus = simulate_focus(

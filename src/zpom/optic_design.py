@@ -746,6 +746,8 @@ def design_grating_hologram(U_0,
                             compression='lzf',
                             verbose=False):
 
+    if outer_r is None:
+        raise NotImplementedError('There is no default for outer_r yet')
     # The COM of the input window is defined as (0,0), and the output window
     # is defined with respect to that.
     input_shape = list(U_0.shape)
@@ -908,13 +910,14 @@ def design_grating_hologram(U_0,
             # This lets us do nice stuff like dice the ZP up into radial
             # zones, making sure that the transitions always occur away from
             # patterned zones
-            effective_Rs =  ( np.sqrt(zone_phase * wavelength / np.pi) *
-                     np.sqrt((zone_phase * wavelength / np.pi) + 2*f))
+            effective_Rs =  ( np.sqrt(design_order * zone_phase * wavelength / np.pi) *
+                     np.sqrt((design_order * zone_phase * wavelength / np.pi) + 2*f))
             
             buttress_regions = t.floor((t.log(effective_Rs)-np.log(outer_r))
                                        / np.log(1-buttress_deviation))
             nominal_Rs = t.exp(buttress_regions * np.log(1-buttress_deviation)
                                + np.log(outer_r))
+            
             grating_phase = Angles * 2 * np.pi * nominal_Rs / buttress_spacing
             
             if tiling_style.lower() == 'simple':
@@ -1195,9 +1198,14 @@ def polygon_area(points):
 # Shrinks the rectangle by an equal amount along all sides until
 # it's area matches that of the original contour
 #
-def shrink_rect(rect_points, original_contour, grow=0):
+def shrink_rect(rect_points, original_contour, grow=0, area_tol=0.2):
     original_area = polygon_area(original_contour)
     rect_area = polygon_area(rect_points)
+
+    # Put in a basic filter:
+    if abs((rect_area-original_area) / original_area) > area_tol:
+        return None
+    
     ax1 = rect_points[1] - rect_points[0]
     ax2 = rect_points[2] - rect_points[1]
 
@@ -1209,7 +1217,7 @@ def shrink_rect(rect_points, original_contour, grow=0):
 
     a = 4
     b = -2 * (l1 + l2)
-    c = rect_area - original_area
+    c = rect_area - original_area    
     shrink_amount = (-b - np.sqrt(b**2 - 4 * a * c)) / (2 * a)
 
     shrink_amount = shrink_amount - grow
@@ -1240,6 +1248,8 @@ def single_clean_step(contour,epsilon=1,max_points=None,
         if len(contour) >=4:
             rect_points = minimum_bounding_rectangle(contour)
             rect_points = shrink_rect(rect_points, contour[:-1], grow=grow)
+            if rect_points is None:
+                return None
             #rect_area = polygon_area(rect_points)
             #original_area = polygon_area(contour[:-1])
             #rect_points = scale_polygon(
@@ -1277,6 +1287,8 @@ def clean_contours_multiprocess(contours, n_processes=4, show_progress=False,
         else:
             contours = list(pool.imap(single_step, contours, chunksize=100))
 
+
+    contours = [c for c in contours if c is not None]
     print('Removing contours with fewer than 4 points')
     if remove_small:
         contours = [c for c in contours if len(c) >=5]
