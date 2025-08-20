@@ -20,6 +20,8 @@ def main():
     parser.add_argument('--output', '-o', type=str, help='The output filename base (without the .gds or .h5 extension) to be used for the output gdsii and low-resolution mask file. There is a sensible default')
     parser.add_argument('--rect', action='store_true', help='If True, returns a gds file with rectangles instead of polygons')
     parser.add_argument('--grow', type=float, default=0, help='When the "--rect" option is used, this argument will grow (or shrink, for negative values) the size of each defined zone by the specified amount in nm.')
+    parser.add_argument('--min_dimension', '-md', type=float, default=None, help='The minimum feature size, in nm, to preserve in the output .gds file. Default is dr/3')
+    parser.add_argument('--min_dash_length', '-mdl', type=float, default=0, help='The dash length corresponding to zero efficiency, in nm. Default is 0.')
     args = parser.parse_args()
 
     if args.output is None:
@@ -34,14 +36,23 @@ def main():
     with h5py.File(args.base_file,'r') as f:
         dr = float(f['dr'][()])
 
+    if args.min_dimension is None:
+        min_dimension = dr/3
+    else:
+        min_dimension = args.min_dimension * 1e-9
+        
     buttress_width = args.buttress_width*1e-9
     grow = args.grow * 1e-9
+    min_dash_length = args.min_dash_length * 1e-9
+    
 
     print('Outer zone width %0.3f nm' % (1e9 * dr))    
     print('Buttress width: %0.3f nm' % (buttress_width * 1e9))
     print('Grating Level: %0.3f' % args.grating_level)
     print('Using rectangles?', args.rect)
     print('Grow rectangles by %0.3f nm' % (grow * 1e9))
+    print('Min dimension: %0.3f nm' % (min_dimension * 1e9))
+    print('Minimum dash length: %0.3f nm' % (min_dash_length * 1e9))
     print('')
     print('Starting Calculation')
 
@@ -54,7 +65,8 @@ def main():
                    verbose=True, view=False,
                    use_rectangles=args.rect,
                    grow=grow,
-                   min_dimension=dr/3)
+                   min_dimension=min_dimension,
+                   zone_min_dash_length=min_dash_length)
 
 
 if __name__ == '__main__':

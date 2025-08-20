@@ -87,6 +87,7 @@ def create_G(U_0, z, wavelength, step, offset=[0,0]):
 
     # Now we finally calculate G
     prefactor = (step[0] * step[1] / (2 * np.pi)) * np.abs(z)
+
     G = prefactor * t.exp(ik * R) * (1/R - ik) / R**2
 
     del R

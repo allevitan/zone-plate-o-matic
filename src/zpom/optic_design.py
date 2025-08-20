@@ -893,9 +893,15 @@ def design_grating_hologram(U_0,
             perfect_zp_phase = (2*np.pi/wavelength) * (
                 Rs2 / (np.sqrt(f**2 + Rs**2) + f))
 
-            perfect_zp_phase = perfect_zp_phase
+            # This adjustment adds the overall e^ikz dependence to match
+            # the output of FT_DI
+            perfect_zp_phase = perfect_zp_phase + \
+                (np.mod((2 * np.pi / wavelength) * f - np.pi/2, 2*np.pi)
+                 - np.pi)
 
-            out_tile_angle = t.angle(out_tile)
+            phase_adjustment = np.exp(-1j * (
+                (2 * np.pi / wavelength) * f - np.pi/2))
+            out_tile_angle = t.angle(phase_adjustment * out_tile)
             zone_phase = (perfect_zp_phase + out_tile_angle) / 2
 
             # Now we correct this zone phase for the design diffraction order
@@ -973,13 +979,19 @@ def realize_design(filename, gds_filename,
                    chunk_size=2048, n_processes=6,
                    verbose=False, overlap=512, view=False,
                    min_dimension=None, grow=0,
-                   use_rectangles=False):
+                   use_rectangles=False,
+                   zone_min_dash_length=0):
     """Makes contours and the low resolution version"""
     
     with h5py.File(filename,'r') as f:
         step = float(f['step'][()])
         buttress_spacing = float(f['buttress_spacing'][()])
         buttress_fraction = buttress_width / (buttress_spacing)
+        print(zone_min_dash_length)
+        print(buttress_spacing)
+        zone_min_fraction = zone_min_dash_length / (buttress_spacing)
+        print(zone_min_fraction)
+        
         offset = np.array(f['offset'])        
 
         shape = f['amplitude'].shape
@@ -1000,7 +1012,16 @@ def realize_design(filename, gds_filename,
             grating = np.array(f['grating'][start_i:end_i, start_j:end_j])
             grating = t.as_tensor(grating) / 127
 
-            mask = ((amplitude >= grating_max * grating)
+            # This allows one to set a minimum length for the zone dashes
+            # which corresponds to zero efficiency. This is helpful for
+            # zone-doubled optics, where you only start getting real efficiency
+            # into the second order once you exceed twice the coating thickness
+            rescaled_amplitude = (
+                zone_min_fraction +
+                (1 - zone_min_fraction) * amplitude / grating_max
+            )
+
+            mask = ((rescaled_amplitude >= grating)
                     * (grating >= 0)
                     * (grating <= (1-buttress_fraction)))
             mask = mask.to(dtype=t.float32).numpy()
@@ -1028,11 +1049,12 @@ def realize_design(filename, gds_filename,
             print('Now cleaning the contours')
         if use_rectangles:
             print('Output contours will be defined as rectangles')
+            md = (None if min_dimension is None else (min_dimension / step))
             final_contours = clean_contours_multiprocess(
                 contours, n_processes=n_processes, show_progress=verbose,
                 max_points=8, epsilon=0.8, use_rectangles=use_rectangles,
                 grow=(grow/step),
-                min_dimension=(min_dimension / step))
+                min_dimension=md)
         else:
             print('Output contours will be defined as arbitrary polygons')
             final_contours = clean_contours_multiprocess(
@@ -1289,13 +1311,17 @@ def clean_contours_multiprocess(contours, n_processes=4, show_progress=False,
 
 
     contours = [c for c in contours if c is not None]
-    print('Removing contours with fewer than 4 points')
     if remove_small:
+        print('Removing contours with fewer than 4 points')
         contours = [c for c in contours if len(c) >=5]
-
-    print('Removing contours with a critical dimensions that is too small')
+    else:
+        print('Not removing contours with fewer than 4 points')
+        
     if min_dimension is not None and use_rectangles:
+        print('Removing contours with a critical dimensions that is too small')
+        min_rect_idx = np.argmin([calc_min_dimension(c) for c in contours[:20]])
         contours = [c for c in contours
                     if calc_min_dimension(c) >= min_dimension]
-
+    else:
+        print('Not removing contours with a critical dimension that is too small')
     return contours
