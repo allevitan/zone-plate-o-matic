@@ -27,6 +27,9 @@ def main():
     parser.add_argument('--cache-raster', action='store_true', help='If set, the rasterized optic will be saved')
     parser.add_argument('--ignore-cache', action='store_true', help='If set, will force a re-rasterization of the optic, even if a cached version exists')
     parser.add_argument('--zone-double-width', type=float, default=None, help='If set, will roughly simulate a zone-doubled optic with the specified thickness of material, in nanometers, deposited')
+    parser.add_argument('--efficiency_calc_radius', type=float, default=None, help='In nanometers, the radius of the region at the sample plane to consider when calculating the optic efficiency')
+    parser.add_argument('--efficiency_calc_optic_diameter', type=float, default=None, help='In micrometers, the diameter of the optic being simulated, to help with the efficiency calculation')
+    parser.add_argument('--efficiency_calc_beamstop_ratio', type=float, default=None, help='The beamstop ratio of the optic being simulated, to help with the efficiency calculation')
     args = parser.parse_args()
 
     wavelength = args.wavelength * 1e-9 # nm
@@ -107,6 +110,22 @@ def main():
                 f.create_dataset('input_offset', data=input_offset)
                 f.create_dataset('step', data=step)
 
+    if args.efficiency_calc_radius is not None:
+        print('Calculating the initial illumination intensity for efficiency '
+              'comparison')
+        abs_input = np.abs(rasterized_zp)
+
+        illuminated_area = \
+            ( np.pi * (1000*args.efficiency_calc_optic_diameter / 2)**2 -
+              np.pi * (args.efficiency_calc_beamstop_ratio * 
+                       1000*args.efficiency_calc_optic_diameter / 2)**2
+             )
+
+        illuminated_npix = illuminated_area / (1e9*step)**2
+
+        init_intensity = \
+            illuminated_npix * np.amax(abs_input).astype(np.float64)**2
+
         
     print('Simulating the focus', flush=True)
     focus = simulate_focus(
@@ -119,13 +138,50 @@ def main():
         tile_shape=[args.tile_size, args.tile_size],
         verbose=True,
         calculation_device=args.device)
+
+    if args.efficiency_calc_radius is not None:
+        print('Calculating the efficiency ratio')
+        xs = (t.arange(focus.shape[1]) - focus.shape[1]//2) * step*1e9
+        ys = (t.arange(focus.shape[1]) - focus.shape[1]//2) * step*1e9
+        Xs, Ys = t.meshgrid(xs, ys, indexing='ij')
+        calc_region = (Xs**2 + Ys**2) <= args.efficiency_calc_radius**2
+        
+        output_intensity = t.sum(t.abs(calc_region * focus)**2)
+
+        # Okay, what have we actually calculated here?
+
+        # init_intensity is an estimate of the total power which illuminated
+        # the optic, based on provided geometry parameters and the maximum
+        # value of the input, rasterized optic.
+
+        # output_intensity is a measurement of the total power within the
+        # provided radius at the focus plane
+
+        # Here, all the optics we simulate are defined as pure-amplitude
+        # optics which are generated from design files. After fabrication,
+        # the efficiency may vary dramatically, but we can at least compare
+        # the measured efficiency of the perfectly-fabricated amplitude-only
+        # zone plate to that of an ideal amplitude-only zone plate, and get
+        # a ratio of how much penalty in efficiency is baked into the optic.
+
+        # The efficiency of such a perfect optic is 1/pi**2, hence the
+        # multiplication by pi**2
+        
+        efficiency_ratio = np.pi**2 * output_intensity.numpy() / init_intensity
+        print('Calculated efficiency ratio:', efficiency_ratio)
+        
+    else:
+        efficiency_ratio = 0
+        
     print('Focus simulation complete, saving', flush=True)
 
+    
     with h5py.File(output, 'w') as f:
         f.create_dataset('sim_focus', data=focus)
         f.create_dataset('wavelength', data=[wavelength])
         f.create_dataset('focal_distance', data=[focal_distance])
         f.create_dataset('step', data=[step])
+        f.create_dataset('efficiency_ratio', data=[efficiency_ratio])
     print('Saved')
 
 if __name__ == '__main__':
