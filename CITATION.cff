@@ -1,0 +1,24 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 0.1.0
+title: zone-plate-o-matic
+message: >-
+  Please contact Abe Levitan (abraham.levitan@psi.ch) if you
+  publish work using this code, so we know!
+type: software
+authors:
+  - given-names: Abraham
+    family-names: Levitan
+    email: abraham.levitan@psi.ch
+    affiliation: Paul Scherrer Institute
+    orcid: 'https://orcid.org/0000-0002-4568-2637'
+identifiers:
+  - type: url
+    value: 'https://github.com/allevitan/zone-plate-o-matic'
+    description: Github Repository
+repository-code: 'https://github.com/allevitan/zone-plate-o-matic'
+url: 'https://github.com/allevitan/zone-plate-o-matic'
+abstract: >-
+  Zone plates, zone plates! Get your zone plates here! Hot, fresh zone plates, best zone plates in all of Switzerland!
+license: MIT
